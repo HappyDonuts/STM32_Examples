@@ -1,6 +1,5 @@
-Core/Src/test_SPI_DAC.o: ../Core/Src/test_SPI_DAC.c \
- ../Core/Inc/test_SPI_DAC.h ../Core/Inc/main.h \
- ../Drivers/STM32F3xx_HAL_Driver/Inc/stm32f3xx_hal.h \
+Core/Src/mcp4922.o: ../Core/Src/mcp4922.c ../Core/Inc/mcp4922.h \
+ ../Core/Inc/main.h ../Drivers/STM32F3xx_HAL_Driver/Inc/stm32f3xx_hal.h \
  ../Core/Inc/stm32f3xx_hal_conf.h \
  ../Drivers/STM32F3xx_HAL_Driver/Inc/stm32f3xx_hal_rcc.h \
  ../Drivers/STM32F3xx_HAL_Driver/Inc/stm32f3xx_hal_def.h \
@@ -26,10 +25,9 @@ Core/Src/test_SPI_DAC.o: ../Core/Src/test_SPI_DAC.c \
  ../Drivers/STM32F3xx_HAL_Driver/Inc/stm32f3xx_hal_pwr.h \
  ../Drivers/STM32F3xx_HAL_Driver/Inc/stm32f3xx_hal_pwr_ex.h \
  ../Drivers/STM32F3xx_HAL_Driver/Inc/stm32f3xx_hal_spi.h \
- ../Drivers/STM32F3xx_HAL_Driver/Inc/stm32f3xx_hal_spi_ex.h \
- ../Core/Inc/mcp4922.h
+ ../Drivers/STM32F3xx_HAL_Driver/Inc/stm32f3xx_hal_spi_ex.h
 
-../Core/Inc/test_SPI_DAC.h:
+../Core/Inc/mcp4922.h:
 
 ../Core/Inc/main.h:
 
@@ -86,5 +84,3 @@ Core/Src/test_SPI_DAC.o: ../Core/Src/test_SPI_DAC.c \
 ../Drivers/STM32F3xx_HAL_Driver/Inc/stm32f3xx_hal_spi.h:
 
 ../Drivers/STM32F3xx_HAL_Driver/Inc/stm32f3xx_hal_spi_ex.h:
-
-../Core/Inc/mcp4922.h:
