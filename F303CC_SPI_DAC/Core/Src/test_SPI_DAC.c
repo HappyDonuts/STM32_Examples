@@ -21,7 +21,6 @@ uint16_t PIN_CS = GPIO_PIN_0;
 /* VARIABLES ------------------------------- */
 mcp4922_t* dac_1;
 /* FUNCTION PROTOTYPES --------------------- */
-void setDAC(uint16_t data, uint8_t channel);
 
 /**
   * @brief  The application entry point.
