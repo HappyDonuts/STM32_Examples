@@ -11,7 +11,6 @@ RM := rm -rf
 -include Drivers/STM32F4xx_HAL_Driver/Src/subdir.mk
 -include Core/Startup/subdir.mk
 -include Core/Src/subdir.mk
--include Core/subdir.mk
 -include subdir.mk
 -include objects.mk
 
@@ -41,8 +40,8 @@ F401_Breath_LED.bin \
 all: F401_Breath_LED.elf secondary-outputs
 
 # Tool invocations
-F401_Breath_LED.elf: $(OBJS) $(USER_OBJS) D:\Users\Javi\GitHub\STM32_Projects\F401_Breath_LED\STM32F401CCUX_FLASH.ld
-	arm-none-eabi-gcc -o "F401_Breath_LED.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"D:\Users\Javi\GitHub\STM32_Projects\F401_Breath_LED\STM32F401CCUX_FLASH.ld" --specs=nosys.specs -Wl,-Map="F401_Breath_LED.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+F401_Breath_LED.elf: $(OBJS) $(USER_OBJS) D:\Users\Javi\GitHub\STM32_Other\F401_Breath_LED\STM32F401CCUX_FLASH.ld
+	arm-none-eabi-gcc -o "F401_Breath_LED.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"D:\Users\Javi\GitHub\STM32_Other\F401_Breath_LED\STM32F401CCUX_FLASH.ld" --specs=nosys.specs -Wl,-Map="F401_Breath_LED.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

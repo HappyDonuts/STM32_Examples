@@ -1178,10 +1178,10 @@ void Error_Handler(void)
  8000c74:	4770      	bx	lr
 
 08000c76 <mcp4922_new>:
- * @brief  Creates new mcp4922_t variable corresponding to a mcp4922 module
- * @param  *hspi: SPI peripheral from the mcu
- * @param  addr: I2C address used by the module
- * @retval mcp_t variable corresponding to the mcp module
+ * @param  v_ref_A: Reference voltage channel A (mV)
+ * @param  v_ref_B: Reference voltage channel B (mV)
+ * @param  buffered: 1: Buffered output	0: Unbuffered output
+ * @retval mcp4922_t variable corresponding to the mcp4299 module
  */
 mcp4922_t* mcp4922_new(SPI_HandleTypeDef *hspi, GPIO_TypeDef* port_CS, uint16_t pin_CS, uint16_t v_ref_A, uint16_t v_ref_B, uint8_t buffered){
  8000c76:	b580      	push	{r7, lr}
@@ -1222,9 +1222,9 @@ mcp4922_t* mcp4922_new(SPI_HandleTypeDef *hspi, GPIO_TypeDef* port_CS, uint16_t 
  8000cba:	bd80      	pop	{r7, pc}
 
 08000cbc <mcp4922_init>:
- * @param  *mcp: mcp variable corresponding to the module targeted
- * @param  *hi2c: I2C peripheral from the mcu
- * @param  addr: I2C address used by the module
+ * @param  v_ref_A: Reference voltage channel A (mV)
+ * @param  v_ref_B: Reference voltage channel B (mV)
+ * @param  buffered: 1: Buffered output	0: Unbuffered output
  * @retval None
  */
 void mcp4922_init(mcp4922_t *mcp4922, SPI_HandleTypeDef *hspi, GPIO_TypeDef* port_CS, uint16_t pin_CS, uint16_t v_ref_A, uint16_t v_ref_B, uint8_t buffered){
@@ -1269,9 +1269,9 @@ void mcp4922_init(mcp4922_t *mcp4922, SPI_HandleTypeDef *hspi, GPIO_TypeDef* por
 	...
 
 08000d00 <mcp4922_write>:
- * @brief  Writes a value on the mcp4725 DAC module
- * @param  value: From 0 to 4095 (12 bits) value to be written on the DAC
- * @param  eeprom: If 1, saves the value on eeprom (persistence after reset)
+ * @brief  Writes a value on the mcp4922 DAC module
+ * @param  voltage: Voltage to be output by the DAC (mV)
+ * @param  channel: 0: Channel A	1: Channel B
  * @retval None
  */
 void mcp4922_write(mcp4922_t *mcp4922, double voltage, uint8_t channel){
