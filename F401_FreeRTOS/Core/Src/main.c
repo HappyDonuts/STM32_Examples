@@ -229,10 +229,12 @@ void StartBlink01(void *argument)
 {
   /* USER CODE BEGIN 5 */
   /* Infinite loop */
+	uint32_t tick = osKernelGetTickCount();
   for(;;)
   {
-	  HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
-	  osDelay(500);
+    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+    tick += 500;
+    osDelayUntil(tick);
   }
   /* USER CODE END 5 */
 }
