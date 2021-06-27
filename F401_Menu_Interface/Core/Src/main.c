@@ -23,7 +23,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "ssd1306_basic.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -45,17 +45,34 @@ I2C_HandleTypeDef hi2c1;
 
 TIM_HandleTypeDef htim2;
 
-/* Definitions for defaultTask */
-osThreadId_t defaultTaskHandle;
-const osThreadAttr_t defaultTask_attributes = {
-  .name = "defaultTask",
+/* Definitions for encoderPolling */
+osThreadId_t encoderPollingHandle;
+const osThreadAttr_t encoderPolling_attributes = {
+  .name = "encoderPolling",
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
+/* Definitions for displayUpdate */
+osThreadId_t displayUpdateHandle;
+const osThreadAttr_t displayUpdate_attributes = {
+  .name = "displayUpdate",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityBelowNormal,
+};
+/* Definitions for mutex_position */
+osMutexId_t mutex_positionHandle;
+const osMutexAttr_t mutex_position_attributes = {
+  .name = "mutex_position"
+};
 /* USER CODE BEGIN PV */
-	uint32_t counter = 0;
-	int16_t counter_int = 0;
 	int16_t position = 0;
+	uint8_t button_flag = 0;
+	uint32_t lastTick = 0;
+	uint32_t now;
+	ssd1306_t* ssd1306_1;
+	uint32_t tick_begin;
+	uint32_t tick_end;
+	uint32_t time_ms;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -63,7 +80,8 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_I2C1_Init(void);
-void StartDefaultTask(void *argument);
+void StartEncoderPolling(void *argument);
+void StartDisplayUpdate(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -105,11 +123,29 @@ int main(void)
   MX_TIM2_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
+  ssd1306_1 = ssd1306_new(&hi2c1, 0x78); // 0x79
+
+
+  SSD1306_GotoXY(ssd1306_1, 2, 0);
+  SSD1306_Puts(ssd1306_1, "  Menu 1", &Font_11x18, 1);
+  SSD1306_GotoXY(ssd1306_1, 2, 18);
+  SSD1306_Puts(ssd1306_1, "  Menu 2", &Font_11x18, 1);
+  SSD1306_GotoXY(ssd1306_1, 2, 36);
+  SSD1306_Puts(ssd1306_1, "  Menu 3", &Font_11x18, 1);
+  SSD1306_GotoXY(ssd1306_1, 2, 53);
+  SSD1306_Puts(ssd1306_1, "  Menu 4", &Font_7x10, 1);
+  SSD1306_GotoXY(ssd1306_1, SSD1306_WIDTH/2, 53);
+  SSD1306_Puts(ssd1306_1, "  Menu 5", &Font_7x10, 1);
+  SSD1306_UpdateScreen(ssd1306_1);
+
   HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
   /* USER CODE END 2 */
 
   /* Init scheduler */
   osKernelInitialize();
+  /* Create the mutex(es) */
+  /* creation of mutex_position */
+  mutex_positionHandle = osMutexNew(&mutex_position_attributes);
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
@@ -128,8 +164,11 @@ int main(void)
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-  /* creation of defaultTask */
-  defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+  /* creation of encoderPolling */
+  encoderPollingHandle = osThreadNew(StartEncoderPolling, NULL, &encoderPolling_attributes);
+
+  /* creation of displayUpdate */
+  displayUpdateHandle = osThreadNew(StartDisplayUpdate, NULL, &displayUpdate_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -306,37 +345,106 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
+  /*Configure GPIO pin : PA2 */
+  GPIO_InitStruct.Pin = GPIO_PIN_2;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI2_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI2_IRQn);
+
 }
 
 /* USER CODE BEGIN 4 */
 //void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim){
 //
 //}
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+	now = HAL_GetTick();
+	if (now > lastTick){
+		button_flag = 1;
+		lastTick = now + 70;
+	}
+
+
+}
 /* USER CODE END 4 */
 
-/* USER CODE BEGIN Header_StartDefaultTask */
+/* USER CODE BEGIN Header_StartEncoderPolling */
 /**
-  * @brief  Function implementing the defaultTask thread.
+  * @brief  Function implementing the encoderPolling thread.
   * @param  argument: Not used
   * @retval None
   */
-/* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void *argument)
+/* USER CODE END Header_StartEncoderPolling */
+void StartEncoderPolling(void *argument)
 {
   /* USER CODE BEGIN 5 */
   /* Infinite loop */
 	uint32_t tick = osKernelGetTickCount();
   for(;;)
   {
+	osMutexAcquire(mutex_positionHandle, 0);
 	position = ((int16_t)__HAL_TIM_GET_COUNTER(&htim2))/4;
 	if (position < 0){
 		__HAL_TIM_SET_COUNTER(&htim2, 0);
+		position = 0;
 	}
+	if (position > 4){
+		__HAL_TIM_SET_COUNTER(&htim2, 4*4);
+		position = 4;
+	}
+	osMutexRelease(mutex_positionHandle);
 	tick += 17;
 	osDelayUntil(tick);
   }
   osThreadTerminate(NULL);
   /* USER CODE END 5 */
+}
+
+/* USER CODE BEGIN Header_StartDisplayUpdate */
+/**
+* @brief Function implementing the displayUpdate thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartDisplayUpdate */
+void StartDisplayUpdate(void *argument)
+{
+  /* USER CODE BEGIN StartDisplayUpdate */
+  /* Infinite loop */
+	uint32_t tick = osKernelGetTickCount();
+	static uint8_t cursor_enable = 0;
+  for(;;)
+  {
+	  if (cursor_enable){
+		  osMutexAcquire(mutex_positionHandle, 0);
+		  int16_t position_l = position;
+		  osMutexRelease(mutex_positionHandle);
+
+		  tick_begin = osKernelGetTickCount();
+		  SSD1306_SetCursor(ssd1306_1, position_l);
+		  tick_end = osKernelGetTickCount();
+		  time_ms = tick_end - tick_begin;
+	  } else {
+		  SSD1306_ResetCursor(ssd1306_1);
+	  }
+	  SSD1306_UpdateScreen(ssd1306_1);
+
+	  if (button_flag){
+		  cursor_enable = !cursor_enable;
+		  __HAL_TIM_SET_COUNTER(&htim2, 0);
+		  button_flag = 0;
+	  }
+
+	  tick += 100;
+	  osDelayUntil(tick);
+  }
+  osThreadTerminate(NULL);
+  /* USER CODE END StartDisplayUpdate */
 }
 
  /**
