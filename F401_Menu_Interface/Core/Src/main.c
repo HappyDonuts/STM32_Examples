@@ -138,6 +138,21 @@ int main(void)
   SSD1306_Puts(ssd1306_1, "  Menu 5", &Font_7x10, 1);
   SSD1306_UpdateScreen(ssd1306_1);
 
+  lcd_init();
+
+  	lcd_send_cmd (0x80|0x00);
+//  	lcd_send_string("HELLO WORLD");
+  	lcd_send_string("Holaaa");
+
+  	lcd_send_cmd (0x80|0x40);
+  	lcd_send_string("LCD 20x4 DEMO");
+
+  	lcd_send_cmd (0x80|0x1C);
+  	lcd_send_string("BY");
+
+  	lcd_send_cmd (0x80|0x54);
+  	lcd_send_string("ControllersTech");
+
   HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
   /* USER CODE END 2 */
 
