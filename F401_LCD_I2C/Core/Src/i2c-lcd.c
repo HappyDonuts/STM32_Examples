@@ -44,15 +44,15 @@ void lcd_clear (void)
 void lcd_init (void)
 {
 	// 4 bit initialisation
-//	HAL_Delay(50);  // wait for >40ms
+	HAL_Delay(50);  // wait for >40ms
 	lcd_send_cmd (0x30);
-//	HAL_Delay(5);  // wait for >4.1ms
+	HAL_Delay(5);  // wait for >4.1ms
 	lcd_send_cmd (0x30);
-//	HAL_Delay(1);  // wait for >100us
+	HAL_Delay(1);  // wait for >100us
 	lcd_send_cmd (0x30);
-//	HAL_Delay(10);
+	HAL_Delay(10);
 	lcd_send_cmd (0x20);  // 4bit mode
-//	HAL_Delay(10);
+	HAL_Delay(10);
 
   // dislay initialisation
 	lcd_send_cmd (0x28); // Function set --> DL=0 (4 bit mode), N = 1 (2 line display) F = 0 (5x8 characters)

@@ -24,6 +24,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "ssd1306_basic.h"
+#include "lcd_i2c.h"
+#include "lcd_i2c_RTOS.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -70,6 +72,7 @@ const osMutexAttr_t mutex_position_attributes = {
 	uint32_t lastTick = 0;
 	uint32_t now;
 	ssd1306_t* ssd1306_1;
+	lcd_i2c_t* lcd_i2c_1;
 	uint32_t tick_begin;
 	uint32_t tick_end;
 	uint32_t time_ms;
@@ -124,6 +127,7 @@ int main(void)
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
   ssd1306_1 = ssd1306_new(&hi2c1, 0x78); // 0x79
+  lcd_i2c_1 = lcd_i2c_new(&hi2c1, 0x4E, 16, 2);
 
 
   SSD1306_GotoXY(ssd1306_1, 2, 0);
@@ -138,20 +142,21 @@ int main(void)
   SSD1306_Puts(ssd1306_1, "  Menu 5", &Font_7x10, 1);
   SSD1306_UpdateScreen(ssd1306_1);
 
-  lcd_init();
-
-  	lcd_send_cmd (0x80|0x00);
-//  	lcd_send_string("HELLO WORLD");
-  	lcd_send_string("Holaaa");
-
-  	lcd_send_cmd (0x80|0x40);
-  	lcd_send_string("LCD 20x4 DEMO");
-
-  	lcd_send_cmd (0x80|0x1C);
-  	lcd_send_string("BY");
-
-  	lcd_send_cmd (0x80|0x54);
-  	lcd_send_string("ControllersTech");
+//  lcd_send_cmd(lcd_i2c_1, LCD_SETDDRAMADDR|0x00);
+//  lcd_send_string(lcd_i2c_1, "Hello world!");
+  while(1){
+	  lcd_i2c_Write(lcd_i2c_1, 0, 0, "1");
+	  HAL_Delay(600);
+	  lcd_i2c_Write(lcd_i2c_1, 0, 0, "8");
+	  HAL_Delay(600);
+  }
+//  lcd_i2c_Cursor_On(lcd_i2c_1);
+//  lcd_i2c_Cursor_Blink_On(lcd_i2c_1);
+//  lcd_i2c_Left_To_Right(lcd_i2c_1);
+//  lcd_i2c_Autoscroll_On(lcd_i2c_1);
+  lcd_i2c_Scroll_Left(lcd_i2c_1);
+//  lcd_i2c_Write(lcd_i2c_1, 2, 0, "BY");
+//  lcd_i2c_Write(lcd_i2c_1, 3, 0, "ControllersTech");
 
   HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
   /* USER CODE END 2 */
