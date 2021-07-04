@@ -53,9 +53,6 @@ uint8_t lcd_i2c_RTOS_Init(lcd_i2c_RTOS_t* lcd_i2c_RTOS, I2C_HandleTypeDef *hi2c,
 	lcd_i2c_RTOS->n_lines = n_lines;
 	lcd_i2c_RTOS->display_control = LCD_DISPLAYON | LCD_CURSOROFF | LCD_BLINKOFF;
 	lcd_i2c_RTOS->display_mode = LCD_ENTRYLEFT | LCD_ENTRYSHIFTDECREMENT;
-	for (int i=0; i<BUFFER_SIZE; i++){
-		lcd_i2c_RTOS->buffer_messages[i] = lcd_i2c_RTOS_message_new(0, 0, 0);
-	}
 	lcd_i2c_RTOS->buffer_index = 0;
 	lcd_i2c_RTOS->empty = 1;
 	lcd_i2c_RTOS->thread_id = thread_id;
@@ -97,10 +94,10 @@ uint8_t lcd_i2c_RTOS_Transmit(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
 	uint8_t keep_tx_msg = 1;
 
 	while(keep_tx_msg) {
-		if (lcd_i2c_RTOS->empty == 0) {
+		if (lcd_i2c_RTOS->empty == 1) {
 			return 0;
 		} else {
-			msg = lcd_i2c_RTOS->buffer_messages[lcd_i2c_RTOS->buffer_index];
+			msg = lcd_i2c_RTOS->buffer_messages[lcd_i2c_RTOS->buffer_index-1];
 			data_u = (msg->message&0xf0);
 			data_l = ((msg->message<<4)&0xf0);
 
@@ -124,10 +121,11 @@ uint8_t lcd_i2c_RTOS_Transmit(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
 			}
 
 			if (lcd_i2c_RTOS->buffer_index == 0) {
-				lcd_i2c_RTOS->empty = 0;
-			} else {
-				lcd_i2c_RTOS->buffer_index--;
+				lcd_i2c_RTOS->empty = 1;
 			}
+//				else {
+				lcd_i2c_RTOS->buffer_index--;
+//			}
 		}
 	}
 	return 1;

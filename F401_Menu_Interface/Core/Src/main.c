@@ -137,9 +137,9 @@ int main(void)
   MX_TIM2_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-  ssd1306_1 = ssd1306_new(&hi2c1, 0x78); // 0x79
-  lcd_i2c_1 = lcd_i2c_new(&hi2c1, 0x4E, 16, 2);
-  lcd_i2c_RTOS_1 = lcd_i2c_RTOS_new(&hi2c1, 0x4E, lcdSendMessagesHandle, 16, 2);
+  ssd1306_1 = ssd1306_new(&hi2c1, 0x3C<<1); // 0x79
+  lcd_i2c_1 = lcd_i2c_new(&hi2c1, 0x27<<1, 16, 2);
+  lcd_i2c_RTOS_1 = lcd_i2c_RTOS_new(&hi2c1, 0x27<<1, lcdSendMessagesHandle, 16, 2);
 
 
   SSD1306_GotoXY(ssd1306_1, 2, 0);
@@ -155,16 +155,16 @@ int main(void)
   SSD1306_UpdateScreen(ssd1306_1);
 
 
-  lcd_i2c_Write(lcd_i2c_1, 0, 0, "Hello World!");
-  lcd_i2c_Write(lcd_i2c_1, 1, 0, "LCD 16x2 DEMO");
-  lcd_i2c_Write(lcd_i2c_1, 2, 0, "Blah");
-  lcd_i2c_Write(lcd_i2c_1, 3, 0, "Blah again");
+//  lcd_i2c_Write(lcd_i2c_1, 0, 0, "Hello World!");
+//  lcd_i2c_Write(lcd_i2c_1, 1, 0, "LCD 16x2 DEMO");
+//  lcd_i2c_Write(lcd_i2c_1, 2, 0, "Blah");
+//  lcd_i2c_Write(lcd_i2c_1, 3, 0, "Blah again");
 
 
-  lcd_i2c_RTOS_Write(lcd_i2c_RTOS_1, 0, 0, "Hello1 :)");
-  lcd_i2c_RTOS_Write(lcd_i2c_RTOS_1, 1, 0, "Using FreeRTOS");
-  lcd_i2c_RTOS_Write(lcd_i2c_RTOS_1, 2, 0, "Blah");
-  lcd_i2c_RTOS_Write(lcd_i2c_RTOS_1, 3, 0, "Blah again");
+//  lcd_i2c_RTOS_Write(lcd_i2c_RTOS_1, 0, 0, "Hello1 :)");
+//  lcd_i2c_RTOS_Write(lcd_i2c_RTOS_1, 1, 0, "Using FreeRTOS");
+//  lcd_i2c_RTOS_Write(lcd_i2c_RTOS_1, 2, 0, "Blah");
+//  lcd_i2c_RTOS_Write(lcd_i2c_RTOS_1, 3, 0, "Blah again");
 
   HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
   /* USER CODE END 2 */
@@ -397,7 +397,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 	now = HAL_GetTick();
 	if (now > lastTick){
 		button_flag = 1;
-		lastTick = now + 70;
+		lastTick = now + 200;
 	}
 
 
@@ -470,6 +470,8 @@ void StartDisplayUpdate(void *argument)
 		  __HAL_TIM_SET_COUNTER(&htim2, 0);
 		  button_flag = 0;
 	  }
+	  lcd_i2c_Cursor_Off(lcd_i2c_1);
+	  lcd_i2c_Write(lcd_i2c_1, 0, 0, "Hola");
 
 	  tick += 100;
 	  osDelayUntil(tick);

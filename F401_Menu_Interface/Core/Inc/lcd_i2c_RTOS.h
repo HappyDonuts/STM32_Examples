@@ -68,7 +68,9 @@ typedef struct lcd_message_t{
 	uint8_t message;
 	uint8_t exe_time;
 	uint8_t mode;
+	lcd_message_t* next_msg;
 }lcd_message_t;
+
 
 /**
  * @brief  lcd_i2c_RTOS_t struct
@@ -80,7 +82,7 @@ typedef struct lcd_i2c_RTOS_t{
 	uint8_t n_lines;
 	uint8_t display_control;
 	uint8_t display_mode;
-	lcd_message_t* buffer_messages[BUFFER_SIZE];
+	lcd_message_t* buffer_messages;
 	uint8_t buffer_index;
 	uint8_t empty;
 	osThreadId_t thread_id;
