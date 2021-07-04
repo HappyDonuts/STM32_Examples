@@ -5,10 +5,13 @@
 
 
 /**
- * @brief  Creates lcd_i2c_t variable corresponding to the display
+ * @brief  Creates lcd_i2c variable corresponding to the display
+ * @note   Execution time is 81 ms (lcd_i2c_Init function)
  * @param  *hi2c: I2C peripheral used by the mcu
  * @param  addr: I2C address corresponding to the targeted display
- * @retval lcd_i2c_t variable targeting the desired display
+ * @param  n_chars: number of the diaplay columns, or chars (16 or 20)
+ * @param  n_lines: number of the diaplay lines (usually 1, 2, or 4)
+ * @retval lcd_i2c variable targeting the desired display
  */
 lcd_i2c_t* lcd_i2c_new(I2C_HandleTypeDef *hi2c, uint8_t addr, uint8_t n_chars, uint8_t n_lines)
 {
@@ -19,8 +22,12 @@ lcd_i2c_t* lcd_i2c_new(I2C_HandleTypeDef *hi2c, uint8_t addr, uint8_t n_chars, u
 
 /**
  * @brief  Initializes Liquid Crystal LCD display
- * @param  *hi2c: I2C peripheral used by the mcu
+ * @note   Execution time is 81 ms
+ * @param  lcd_i2c variable targeting the desired display
+ * @param  *hi2c: I2C peripheral used by the MCU
  * @param  addr: I2C address corresponding to the targeted display
+ * @param  n_chars: number of the display columns, or chars (16 or 20)
+ * @param  n_lines: number of the display lines (usually 1, 2, or 4)
  * @retval Initialization status:
  *           - 0: LCD was not detected on I2C port
  *           - 1: LCD initialized OK and ready to use
@@ -55,14 +62,20 @@ uint8_t lcd_i2c_Init(lcd_i2c_t* lcd_i2c, I2C_HandleTypeDef *hi2c, uint8_t addr, 
 	lcd_send_cmd (lcd_i2c, 0x08); //Display on/off control --> D=0,C=0, B=0  ---> display off
 	HAL_Delay(1);
 	lcd_send_cmd (lcd_i2c, 0x01);  // clear display
-	HAL_Delay(1);
-	HAL_Delay(1);
+	HAL_Delay(2);
 	lcd_send_cmd (lcd_i2c, 0x06); //Entry mode set --> I/D = 1 (increment cursor) & S = 0 (no shift)
 	HAL_Delay(1);
 	lcd_send_cmd (lcd_i2c, 0x0C); //Display on/off control --> D = 1, C and B = 0. (Cursor and blink, last two bits)
 	return 1;
 }
 
+/**
+ * @brief  Transmits a command through I2C protocol
+ * @note   Execution time is considered 0
+ * @param  lcd_i2c: variable targeting the desired display
+ * @param  cmd: data byte to be added to the buffer
+ * @retval None
+ */
 void lcd_send_cmd (lcd_i2c_t* lcd_i2c, char cmd)
 {
   char data_u, data_l;
@@ -76,7 +89,14 @@ void lcd_send_cmd (lcd_i2c_t* lcd_i2c, char cmd)
 	HAL_I2C_Master_Transmit (lcd_i2c->hi2c, lcd_i2c->addr, (uint8_t *) data_t, 4, 100);
 }
 
-void lcd_send_data (lcd_i2c_t* lcd_i2c, char data)
+/**
+ * @brief  Transmits a data byte through I2C protocol
+ * @note   Execution time is considered 0
+ * @param  lcd_i2c: variable targeting the desired display
+ * @param  data: data byte to be added to the buffer
+ * @retval None
+ */
+void lcd_i2c_send_data (lcd_i2c_t* lcd_i2c, char data)
 {
 	char data_u, data_l;
 	uint8_t data_t[4];
@@ -89,12 +109,15 @@ void lcd_send_data (lcd_i2c_t* lcd_i2c, char data)
 	HAL_I2C_Master_Transmit (lcd_i2c->hi2c, lcd_i2c->addr,(uint8_t *) data_t, 4, 100);
 }
 
-
-void lcd_send_string (lcd_i2c_t* lcd_i2c, char *str)
-{
-	while (*str) lcd_send_data (lcd_i2c, *str++);
-}
-
+/**
+ * @brief  Send a string to the display, so it can be displayed on a specific position of the display
+ * @param  lcd_i2c: variable targeting the desired display
+ * @param  line: line at which the string will be displayed (1, 2, or 4)
+ * @param  col: column at which the string will start to be displayed (under 16 or under 20)
+ * @retval Write status:
+ * 				0: line or column out of the display
+ * 				1: string sent correctly
+ */
 uint8_t lcd_i2c_Write(lcd_i2c_t* lcd_i2c, uint8_t line, uint8_t col, char *str)
 {
 	static uint8_t start_line_0 = 0x00;
@@ -125,7 +148,7 @@ uint8_t lcd_i2c_Write(lcd_i2c_t* lcd_i2c, uint8_t line, uint8_t col, char *str)
 		}
 	}
 	lcd_send_cmd (lcd_i2c, LCD_SETDDRAMADDR|position);
-	lcd_send_string(lcd_i2c, str);
+	while (*str) lcd_i2c_send_data (lcd_i2c, *str++);
 	return 1;
 }
 
@@ -261,23 +284,18 @@ void lcd_i2c_Autoscroll_Off(lcd_i2c_t* lcd_i2c)
 
 /**
  * @brief  Clears the display removing all characters and resets position of the DDRAM
- * @note   Long?
+ * @note   Needs 1.52 ms of execution time
  * @param  lcd_i2c: lcd_i2c_t variable corresponding to the display
  * @retval None
  */
-void lcd_clear (lcd_i2c_t* lcd_i2c)
+void lcd_i2c_Clear (lcd_i2c_t* lcd_i2c)
 {
-//	lcd_send_cmd (lcd_i2c, 0x00);
 	lcd_send_cmd(lcd_i2c, LCD_CLEARDISPLAY);
-//	for (int i=0; i<100; i++)
-//	{
-//		lcd_send_data (lcd_i2c, ' ');
-//	}
 }
 
 /**
  * @brief  Resets the position of the cursor to its initial state
- * @note   Long?
+ * @note   Needs 1.52 ms of execution time
  * @param  lcd_i2c: lcd_i2c_t variable corresponding to the display
  * @retval None
  */

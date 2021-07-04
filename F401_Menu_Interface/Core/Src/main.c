@@ -61,6 +61,13 @@ const osThreadAttr_t displayUpdate_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityBelowNormal,
 };
+/* Definitions for lcdSendMessages */
+osThreadId_t lcdSendMessagesHandle;
+const osThreadAttr_t lcdSendMessages_attributes = {
+  .name = "lcdSendMessages",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityBelowNormal1,
+};
 /* Definitions for mutex_position */
 osMutexId_t mutex_positionHandle;
 const osMutexAttr_t mutex_position_attributes = {
@@ -71,8 +78,11 @@ const osMutexAttr_t mutex_position_attributes = {
 	uint8_t button_flag = 0;
 	uint32_t lastTick = 0;
 	uint32_t now;
+
 	ssd1306_t* ssd1306_1;
 	lcd_i2c_t* lcd_i2c_1;
+	lcd_i2c_RTOS_t* lcd_i2c_RTOS_1;
+
 	uint32_t tick_begin;
 	uint32_t tick_end;
 	uint32_t time_ms;
@@ -85,6 +95,7 @@ static void MX_TIM2_Init(void);
 static void MX_I2C1_Init(void);
 void StartEncoderPolling(void *argument);
 void StartDisplayUpdate(void *argument);
+void StartlcdSendMessages(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -128,6 +139,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
   ssd1306_1 = ssd1306_new(&hi2c1, 0x78); // 0x79
   lcd_i2c_1 = lcd_i2c_new(&hi2c1, 0x4E, 16, 2);
+  lcd_i2c_RTOS_1 = lcd_i2c_RTOS_new(&hi2c1, 0x4E, lcdSendMessagesHandle, 16, 2);
 
 
   SSD1306_GotoXY(ssd1306_1, 2, 0);
@@ -142,21 +154,17 @@ int main(void)
   SSD1306_Puts(ssd1306_1, "  Menu 5", &Font_7x10, 1);
   SSD1306_UpdateScreen(ssd1306_1);
 
-//  lcd_send_cmd(lcd_i2c_1, LCD_SETDDRAMADDR|0x00);
-//  lcd_send_string(lcd_i2c_1, "Hello world!");
-  while(1){
-	  lcd_i2c_Write(lcd_i2c_1, 0, 0, "1");
-	  HAL_Delay(600);
-	  lcd_i2c_Write(lcd_i2c_1, 0, 0, "8");
-	  HAL_Delay(600);
-  }
-//  lcd_i2c_Cursor_On(lcd_i2c_1);
-//  lcd_i2c_Cursor_Blink_On(lcd_i2c_1);
-//  lcd_i2c_Left_To_Right(lcd_i2c_1);
-//  lcd_i2c_Autoscroll_On(lcd_i2c_1);
-  lcd_i2c_Scroll_Left(lcd_i2c_1);
-//  lcd_i2c_Write(lcd_i2c_1, 2, 0, "BY");
-//  lcd_i2c_Write(lcd_i2c_1, 3, 0, "ControllersTech");
+
+  lcd_i2c_Write(lcd_i2c_1, 0, 0, "Hello World!");
+  lcd_i2c_Write(lcd_i2c_1, 1, 0, "LCD 16x2 DEMO");
+  lcd_i2c_Write(lcd_i2c_1, 2, 0, "Blah");
+  lcd_i2c_Write(lcd_i2c_1, 3, 0, "Blah again");
+
+
+  lcd_i2c_RTOS_Write(lcd_i2c_RTOS_1, 0, 0, "Hello1 :)");
+  lcd_i2c_RTOS_Write(lcd_i2c_RTOS_1, 1, 0, "Using FreeRTOS");
+  lcd_i2c_RTOS_Write(lcd_i2c_RTOS_1, 2, 0, "Blah");
+  lcd_i2c_RTOS_Write(lcd_i2c_RTOS_1, 3, 0, "Blah again");
 
   HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
   /* USER CODE END 2 */
@@ -189,6 +197,9 @@ int main(void)
 
   /* creation of displayUpdate */
   displayUpdateHandle = osThreadNew(StartDisplayUpdate, NULL, &displayUpdate_attributes);
+
+  /* creation of lcdSendMessages */
+  lcdSendMessagesHandle = osThreadNew(StartlcdSendMessages, NULL, &lcdSendMessages_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -372,7 +383,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI2_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(EXTI2_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(EXTI2_IRQn);
 
 }
@@ -465,6 +476,28 @@ void StartDisplayUpdate(void *argument)
   }
   osThreadTerminate(NULL);
   /* USER CODE END StartDisplayUpdate */
+}
+
+/* USER CODE BEGIN Header_StartlcdSendMessages */
+/**
+* @brief Function implementing the lcdSendMessages thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartlcdSendMessages */
+void StartlcdSendMessages(void *argument)
+{
+  /* USER CODE BEGIN StartlcdSendMessages */
+  /* Infinite loop */
+	uint32_t tick = osKernelGetTickCount();
+  for(;;)
+  {
+	  lcd_i2c_RTOS_Handle_Messages(lcd_i2c_RTOS_1);
+	  tick += 1;
+	  osDelayUntil(tick);
+  }
+  osThreadTerminate(NULL);
+  /* USER CODE END StartlcdSendMessages */
 }
 
  /**
