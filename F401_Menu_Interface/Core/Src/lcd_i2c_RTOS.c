@@ -14,6 +14,8 @@ lcd_message_t* lcd_i2c_RTOS_message_new(uint8_t message, uint8_t exe_time, uint8
 	lcd_message->message = message;
 	lcd_message->exe_time = ceil((float)(exe_time*osKernelGetTickFreq()/1000));
 	lcd_message->mode = mode;
+	lcd_message->next_msg = NULL;
+	lcd_message->prev_msg = NULL;
 	return lcd_message;
 }
 
@@ -45,22 +47,30 @@ lcd_i2c_RTOS_t* lcd_i2c_RTOS_new(I2C_HandleTypeDef *hi2c, uint8_t addr, osThread
  *           - 0: LCD was not detected on I2C port
  *           - 1: LCD initialized OK and ready to use
  */
-uint8_t lcd_i2c_RTOS_Init(lcd_i2c_RTOS_t* lcd_i2c_RTOS, I2C_HandleTypeDef *hi2c, uint8_t addr, osThreadId_t thread_id, uint8_t n_chars, uint8_t n_lines)
+LCD_StatusTypeDef lcd_i2c_RTOS_Init(lcd_i2c_RTOS_t* lcd_i2c_RTOS, I2C_HandleTypeDef *hi2c, uint8_t addr, osThreadId_t thread_id, uint8_t n_chars, uint8_t n_lines)
 {
+	if ((n_chars != 16) && (n_chars != 20)) {
+		return LCD_INVALID_PARAM;
+	}
+	if ((n_lines != 1) && (n_lines != 2) && (n_lines != 2)) {
+		return LCD_INVALID_PARAM;
+	}
+
 	lcd_i2c_RTOS->hi2c = hi2c;
 	lcd_i2c_RTOS->addr = addr;
 	lcd_i2c_RTOS->n_chars = n_chars;
 	lcd_i2c_RTOS->n_lines = n_lines;
 	lcd_i2c_RTOS->display_control = LCD_DISPLAYON | LCD_CURSOROFF | LCD_BLINKOFF;
 	lcd_i2c_RTOS->display_mode = LCD_ENTRYLEFT | LCD_ENTRYSHIFTDECREMENT;
-	lcd_i2c_RTOS->buffer_index = 0;
-	lcd_i2c_RTOS->empty = 1;
+	lcd_i2c_RTOS->buffer_first_msg = NULL;
+	lcd_i2c_RTOS->buffer_last_msg = NULL;
+	lcd_i2c_RTOS->n_messages = 0;
 	lcd_i2c_RTOS->thread_id = thread_id;
 
 
 	if (HAL_I2C_IsDeviceReady(lcd_i2c_RTOS->hi2c, lcd_i2c_RTOS->addr, 1, 20000) != HAL_OK) {
 			/* Return false */
-			return 0;
+			return LCD_I2C_ERROR;
 		}
 	// Init code
 	lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS, 0x30, 5);
@@ -74,7 +84,7 @@ uint8_t lcd_i2c_RTOS_Init(lcd_i2c_RTOS_t* lcd_i2c_RTOS, I2C_HandleTypeDef *hi2c,
 	lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS, 0x01, 2);	// clear display
 	lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS, 0x06, 1); 	//Entry mode set --> I/D = 1 (increment cursor) & S = 0 (no shift)
 	lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS, 0x0C, 0); 	//Display on/off control --> D = 1, C and B = 0. (Cursor and blink, last two bits)
-	return 1;
+	return LCD_OK;
 }
 
 /**
@@ -86,7 +96,7 @@ uint8_t lcd_i2c_RTOS_Init(lcd_i2c_RTOS_t* lcd_i2c_RTOS, I2C_HandleTypeDef *hi2c,
  * 				0: Buffer is empty or mode is not supported
  * 				1: Transmission was successful
  */
-uint8_t lcd_i2c_RTOS_Transmit(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
+LCD_StatusTypeDef lcd_i2c_RTOS_Transmit(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
 {
 	uint8_t data_u, data_l;
 	uint8_t data_t[4];
@@ -94,10 +104,10 @@ uint8_t lcd_i2c_RTOS_Transmit(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
 	uint8_t keep_tx_msg = 1;
 
 	while(keep_tx_msg) {
-		if (lcd_i2c_RTOS->empty == 1) {
-			return 0;
+		if (lcd_i2c_RTOS->n_messages == 0) {
+			return LCD_BUFFER_EMPTY;
 		} else {
-			msg = lcd_i2c_RTOS->buffer_messages[lcd_i2c_RTOS->buffer_index-1];
+			msg = lcd_i2c_RTOS->buffer_last_msg;
 			data_u = (msg->message&0xf0);
 			data_l = ((msg->message<<4)&0xf0);
 
@@ -112,27 +122,32 @@ uint8_t lcd_i2c_RTOS_Transmit(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
 				data_t[2] = data_l|0x0D;  //en=1, rs=1
 				data_t[3] = data_l|0x09;  //en=0, rs=1
 			} else {
-				return 0;
+				return LCD_INVALID_PARAM;
 			}
-			HAL_I2C_Master_Transmit (lcd_i2c_RTOS->hi2c, lcd_i2c_RTOS->addr, (uint8_t *) data_t, 4, 100);
+
+			if (HAL_I2C_IsDeviceReady(lcd_i2c_RTOS->hi2c, lcd_i2c_RTOS->addr, 1, 10) != HAL_OK) {
+				return LCD_I2C_ERROR;
+			} else {
+				HAL_I2C_Master_Transmit (lcd_i2c_RTOS->hi2c, lcd_i2c_RTOS->addr, (uint8_t *) data_t, 4, 100);
+			}
 
 			if (msg->exe_time != 0) {
 				keep_tx_msg = 0;
 			}
-
-			if (lcd_i2c_RTOS->buffer_index == 0) {
-				lcd_i2c_RTOS->empty = 1;
+			lcd_i2c_RTOS->buffer_last_msg = msg->prev_msg;
+			free(msg);
+			lcd_i2c_RTOS->n_messages--;
+			if (lcd_i2c_RTOS->n_messages == 0) {
+				lcd_i2c_RTOS->buffer_first_msg = NULL;
+				lcd_i2c_RTOS->buffer_last_msg = NULL;
 			}
-//				else {
-				lcd_i2c_RTOS->buffer_index--;
-//			}
 		}
 	}
-	return 1;
+	return LCD_OK;
 }
 
 /**
- * @brief  Adds a command to the message buffer
+ * @brief  Push a command to the start of the buffer
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @param  cmd: command to be added to the buffer
  * @param  exe_time: time needed by the display to  execute the command (ms)
@@ -140,18 +155,24 @@ uint8_t lcd_i2c_RTOS_Transmit(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
  * 				0: The buffer is full
  * 				1: The command was added succesfully
  */
-uint8_t lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS_t* lcd_i2c_RTOS, char cmd, uint8_t exe_time)
+LCD_StatusTypeDef lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS_t* lcd_i2c_RTOS, char cmd, uint8_t exe_time)
 {
-	if (lcd_i2c_RTOS->buffer_index >= BUFFER_SIZE-1) {
-		return 0;
+	if (lcd_i2c_RTOS->n_messages >= BUFFER_SIZE) {
+		return LCD_BUFFER_FULL;
 	} else {
-		lcd_i2c_RTOS->buffer_messages[lcd_i2c_RTOS->buffer_index] = lcd_i2c_RTOS_message_new(cmd, exe_time, MODE_COMMAND);
-		lcd_i2c_RTOS->buffer_index++;
-		lcd_i2c_RTOS->empty = 0;
+		lcd_message_t* msg = lcd_i2c_RTOS_message_new(cmd, exe_time, MODE_COMMAND);
+		msg->next_msg = lcd_i2c_RTOS->buffer_first_msg;
+		if (lcd_i2c_RTOS->buffer_first_msg != NULL) {
+			lcd_i2c_RTOS->buffer_first_msg->prev_msg = msg;
+		} else {
+			lcd_i2c_RTOS->buffer_last_msg = msg;
+		}
+		lcd_i2c_RTOS->buffer_first_msg = msg;
+		lcd_i2c_RTOS->n_messages++;
 		if (osThreadGetState(lcd_i2c_RTOS->thread_id) == osThreadBlocked) {
 			osThreadResume(lcd_i2c_RTOS->thread_id);
 		}
-		return 1;
+		return LCD_OK;
 	}
 }
 
@@ -164,18 +185,25 @@ uint8_t lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS_t* lcd_i2c_RTOS, char cmd, uint8_t e
  * 				0: The buffer is full
  * 				1: The command was added succesfully
  */
-uint8_t lcd_i2c_RTOS_send_data (lcd_i2c_RTOS_t* lcd_i2c_RTOS, char data)
+LCD_StatusTypeDef lcd_i2c_RTOS_send_data (lcd_i2c_RTOS_t* lcd_i2c_RTOS, char data)
 {
-	if (lcd_i2c_RTOS->buffer_index >= BUFFER_SIZE-1) {
-		return 1;
+	if (lcd_i2c_RTOS->n_messages >= BUFFER_SIZE) {
+		return LCD_BUFFER_FULL;
 	} else {
-		lcd_i2c_RTOS->buffer_messages[lcd_i2c_RTOS->buffer_index] = lcd_i2c_RTOS_message_new(data, 0, MODE_DATA);
-		lcd_i2c_RTOS->buffer_index++;
-		lcd_i2c_RTOS->empty = 0;
+		lcd_message_t* msg = lcd_i2c_RTOS_message_new(data, 0, MODE_DATA);
+		msg->next_msg = lcd_i2c_RTOS->buffer_first_msg;
+		msg->prev_msg = NULL;
+		if (lcd_i2c_RTOS->buffer_first_msg != NULL) {
+			lcd_i2c_RTOS->buffer_first_msg->prev_msg = msg;
+		} else {
+			lcd_i2c_RTOS->buffer_last_msg = msg;
+		}
+		lcd_i2c_RTOS->buffer_first_msg = msg;
+		lcd_i2c_RTOS->n_messages++;
 		if (osThreadGetState(lcd_i2c_RTOS->thread_id) == osThreadBlocked) {
 			osThreadResume(lcd_i2c_RTOS->thread_id);
 		}
-		return 0;
+		return LCD_OK;
 	}
 }
 
@@ -184,7 +212,7 @@ void lcd_i2c_RTOS_Handle_Messages(lcd_i2c_RTOS_t* lcd_i2c_RTOS) {
 	uint8_t lcd_busy;
 	static uint32_t tick_cooldown;
 
-	if (lcd_i2c_RTOS->empty == 1) {
+	if (lcd_i2c_RTOS->n_messages == 0) {
 		osThreadSuspend(lcd_i2c_RTOS->thread_id);
 	} else {
 		now = osKernelGetTickCount();
@@ -192,23 +220,27 @@ void lcd_i2c_RTOS_Handle_Messages(lcd_i2c_RTOS_t* lcd_i2c_RTOS) {
 //			lcd_busy = get_busy_state
 			lcd_busy = 0;
 			if (lcd_busy == 0) {
+				tick_cooldown = now + lcd_i2c_RTOS->buffer_last_msg->exe_time;
 				lcd_i2c_RTOS_Transmit(lcd_i2c_RTOS);
-				tick_cooldown = now + lcd_i2c_RTOS->buffer_messages[lcd_i2c_RTOS->buffer_index]->exe_time;
 			}
 		}
 	}
 }
 
 /**
- * @brief  Send a string to the the buffer, so it can be displayed on a specific position of the display
- * @param  lcd_i2c_RTOS: variable targeting the desired display
- * @param  line: line at which the string will be displayed (1, 2, or 4)
- * @param  col: column at which the string will start to be displayed (under 16 or under 20)
- * @retval Write status:
- * 				0: line or column out of the display
- * 				1: string added correctly
+ * @brief  Send a string to the the buffer, so it can be displayed on a specific
+ * 		   position of the display.
+ * @param  lcd_i2c_RTOS: pointer to lcd_i2c_RTOS structure containing the info
+ * 		   for the specified display.
+ * @param  line: line at which the string will be displayed (1, 2, or 4).
+ * @param  col: column at which the string will start to be displayed
+ * 		   (under 16 or under 20).
+ * @param  clear: clears the selected line before displaying the string.
+ * 			 @arg CLEAR_ON: to clear the line
+ * 			 @arg CLEAR_OFF: to not clear the line
+ * @retval LCD Status
  */
-uint8_t lcd_i2c_RTOS_Write(lcd_i2c_RTOS_t* lcd_i2c_RTOS, uint8_t line, uint8_t col, char *str)
+LCD_StatusTypeDef lcd_i2c_RTOS_Write(lcd_i2c_RTOS_t* lcd_i2c_RTOS, uint8_t line, uint8_t col, char *str, uint8_t clear)
 {
 	static uint8_t start_line_0 = 0x00;
 	static uint8_t start_line_1 = 0x40;
@@ -223,23 +255,38 @@ uint8_t lcd_i2c_RTOS_Write(lcd_i2c_RTOS_t* lcd_i2c_RTOS, uint8_t line, uint8_t c
 		start_line_3 = 0x50;
 	}
 	if (col >= lcd_i2c_RTOS->n_chars) {
-		return 0;
+		return LCD_INVALID_PARAM;
 	} else {
 		if ((line == 0) && (lcd_i2c_RTOS->n_lines > 0)) {
-			position = start_line_0 + col;
+			position = start_line_0;
 		} else if ((line == 1) && (lcd_i2c_RTOS->n_lines > 1)) {
-			position = start_line_1 + col;
+			position = start_line_1;
 		} else if ((line == 2) && (lcd_i2c_RTOS->n_lines > 2)) {
-			position = start_line_2 + col;
+			position = start_line_2;
 		} else if ((line == 3) && (lcd_i2c_RTOS->n_lines > 3)) {
-			position = start_line_3 + col;
+			position = start_line_3;
 		} else {
-			return 0;
+			return LCD_INVALID_PARAM;
 		}
 	}
-	lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS, LCD_SETDDRAMADDR|position, 1);
-	while (*str) lcd_i2c_RTOS_send_data (lcd_i2c_RTOS, *str++);
-	return 1;
+	if (clear) {
+		lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS, LCD_SETDDRAMADDR|position, 1);
+		for (int i=0; i<lcd_i2c_RTOS->n_chars; i++) {
+			LCD_StatusTypeDef ret = lcd_i2c_RTOS_send_data (lcd_i2c_RTOS, ' ');
+			if (ret != LCD_OK) {
+				return ret;
+			}
+		}
+	}
+
+	lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS, LCD_SETDDRAMADDR|(position + col), 1);
+	while (*str) {
+		LCD_StatusTypeDef ret = lcd_i2c_RTOS_send_data (lcd_i2c_RTOS, *str++);
+		if (ret != LCD_OK) {
+			return ret;
+		}
+	}
+	return LCD_OK;
 }
 
 /**
@@ -247,10 +294,10 @@ uint8_t lcd_i2c_RTOS_Write(lcd_i2c_RTOS_t* lcd_i2c_RTOS, uint8_t line, uint8_t c
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Display_On(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
+LCD_StatusTypeDef lcd_i2c_RTOS_Display_On(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
 {
 	lcd_i2c_RTOS->display_control |= LCD_DISPLAYON;
-	lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS, LCD_DISPLAYCONTROL | lcd_i2c_RTOS->display_control, 0);
+	return lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS, LCD_DISPLAYCONTROL | lcd_i2c_RTOS->display_control, 0);
 }
 
 /**
@@ -258,10 +305,10 @@ void lcd_i2c_RTOS_Display_On(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Display_Off(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
+LCD_StatusTypeDef lcd_i2c_RTOS_Display_Off(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
 {
 	lcd_i2c_RTOS->display_control &= ~LCD_DISPLAYON;
-	lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS, LCD_DISPLAYCONTROL | lcd_i2c_RTOS->display_control, 0);
+	return lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS, LCD_DISPLAYCONTROL | lcd_i2c_RTOS->display_control, 0);
 }
 
 /**
@@ -269,10 +316,10 @@ void lcd_i2c_RTOS_Display_Off(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Cursor_On(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
+LCD_StatusTypeDef lcd_i2c_RTOS_Cursor_On(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
 {
 	lcd_i2c_RTOS->display_control |= LCD_CURSORON;
-	lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS, LCD_DISPLAYCONTROL | lcd_i2c_RTOS->display_control, 0);
+	return lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS, LCD_DISPLAYCONTROL | lcd_i2c_RTOS->display_control, 0);
 }
 
 /**
@@ -280,10 +327,10 @@ void lcd_i2c_RTOS_Cursor_On(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Cursor_Off(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
+LCD_StatusTypeDef lcd_i2c_RTOS_Cursor_Off(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
 {
 	lcd_i2c_RTOS->display_control &= ~LCD_CURSORON;
-	lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS, LCD_DISPLAYCONTROL | lcd_i2c_RTOS->display_control, 0);
+	return lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS, LCD_DISPLAYCONTROL | lcd_i2c_RTOS->display_control, 0);
 }
 
 /**
@@ -291,10 +338,10 @@ void lcd_i2c_RTOS_Cursor_Off(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Cursor_Blink_On(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
+LCD_StatusTypeDef lcd_i2c_RTOS_Cursor_Blink_On(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
 {
 	lcd_i2c_RTOS->display_control |= LCD_BLINKON;
-	lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS, LCD_DISPLAYCONTROL | lcd_i2c_RTOS->display_control, 0);
+	return lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS, LCD_DISPLAYCONTROL | lcd_i2c_RTOS->display_control, 0);
 }
 
 /**
@@ -302,10 +349,10 @@ void lcd_i2c_RTOS_Cursor_Blink_On(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Cursor_Blink_Off(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
+LCD_StatusTypeDef lcd_i2c_RTOS_Cursor_Blink_Off(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
 {
 	lcd_i2c_RTOS->display_control &= ~LCD_BLINKON;
-	lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS, LCD_DISPLAYCONTROL | lcd_i2c_RTOS->display_control, 0);
+	return lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS, LCD_DISPLAYCONTROL | lcd_i2c_RTOS->display_control, 0);
 }
 
 /**
@@ -313,9 +360,9 @@ void lcd_i2c_RTOS_Cursor_Blink_Off(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Scroll_Left(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
+LCD_StatusTypeDef lcd_i2c_RTOS_Scroll_Left(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
 {
-	lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS, LCD_CURSORSHIFT | LCD_DISPLAYMOVE | LCD_MOVELEFT, 0);
+	return lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS, LCD_CURSORSHIFT | LCD_DISPLAYMOVE | LCD_MOVELEFT, 0);
 }
 
 /**
@@ -323,9 +370,9 @@ void lcd_i2c_RTOS_Scroll_Left(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Scroll_Right(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
+LCD_StatusTypeDef lcd_i2c_RTOS_Scroll_Right(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
 {
-	lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS, LCD_CURSORSHIFT | LCD_DISPLAYMOVE | LCD_MOVERIGHT, 0);
+	return lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS, LCD_CURSORSHIFT | LCD_DISPLAYMOVE | LCD_MOVERIGHT, 0);
 }
 
 /**
@@ -333,10 +380,10 @@ void lcd_i2c_RTOS_Scroll_Right(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Left_To_Right(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
+LCD_StatusTypeDef lcd_i2c_RTOS_Left_To_Right(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
 {
 	lcd_i2c_RTOS->display_mode |= LCD_ENTRYLEFT;
-	lcd_i2c_RTOS_send_cmd(lcd_i2c_RTOS, LCD_ENTRYMODESET | lcd_i2c_RTOS->display_mode, 0);
+	return lcd_i2c_RTOS_send_cmd(lcd_i2c_RTOS, LCD_ENTRYMODESET | lcd_i2c_RTOS->display_mode, 0);
 }
 
 /**
@@ -344,10 +391,10 @@ void lcd_i2c_RTOS_Left_To_Right(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Right_To_Left(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
+LCD_StatusTypeDef lcd_i2c_RTOS_Right_To_Left(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
 {
 	lcd_i2c_RTOS->display_mode &= ~LCD_ENTRYLEFT;
-	lcd_i2c_RTOS_send_cmd(lcd_i2c_RTOS, LCD_ENTRYMODESET | lcd_i2c_RTOS->display_mode, 0);
+	return lcd_i2c_RTOS_send_cmd(lcd_i2c_RTOS, LCD_ENTRYMODESET | lcd_i2c_RTOS->display_mode, 0);
 }
 
 /**
@@ -355,10 +402,10 @@ void lcd_i2c_RTOS_Right_To_Left(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Autoscroll_On(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
+LCD_StatusTypeDef lcd_i2c_RTOS_Autoscroll_On(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
 {
 	lcd_i2c_RTOS->display_mode |= LCD_ENTRYSHIFTINCREMENT;
-	lcd_i2c_RTOS_send_cmd(lcd_i2c_RTOS, LCD_ENTRYMODESET | lcd_i2c_RTOS->display_mode, 0);
+	return lcd_i2c_RTOS_send_cmd(lcd_i2c_RTOS, LCD_ENTRYMODESET | lcd_i2c_RTOS->display_mode, 0);
 }
 
 /**
@@ -366,10 +413,10 @@ void lcd_i2c_RTOS_Autoscroll_On(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Autoscroll_Off(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
+LCD_StatusTypeDef lcd_i2c_RTOS_Autoscroll_Off(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
 {
 	lcd_i2c_RTOS->display_mode &= ~LCD_ENTRYSHIFTINCREMENT;
-	lcd_i2c_RTOS_send_cmd(lcd_i2c_RTOS, LCD_ENTRYMODESET | lcd_i2c_RTOS->display_mode, 0);
+	return lcd_i2c_RTOS_send_cmd(lcd_i2c_RTOS, LCD_ENTRYMODESET | lcd_i2c_RTOS->display_mode, 0);
 }
 
 /**
@@ -378,9 +425,9 @@ void lcd_i2c_RTOS_Autoscroll_Off(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Clear (lcd_i2c_RTOS_t* lcd_i2c_RTOS)
+LCD_StatusTypeDef lcd_i2c_RTOS_Clear (lcd_i2c_RTOS_t* lcd_i2c_RTOS)
 {
-	lcd_i2c_RTOS_send_cmd(lcd_i2c_RTOS, LCD_CLEARDISPLAY, 2);
+	return lcd_i2c_RTOS_send_cmd(lcd_i2c_RTOS, LCD_CLEARDISPLAY, 2);
 }
 
 /**
@@ -389,9 +436,9 @@ void lcd_i2c_RTOS_Clear (lcd_i2c_RTOS_t* lcd_i2c_RTOS)
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Reset_Poistion(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
+LCD_StatusTypeDef lcd_i2c_RTOS_Reset_Poistion(lcd_i2c_RTOS_t* lcd_i2c_RTOS)
 {
-	lcd_i2c_RTOS_send_cmd(lcd_i2c_RTOS, LCD_RETURNHOME, 2);
+	return lcd_i2c_RTOS_send_cmd(lcd_i2c_RTOS, LCD_RETURNHOME, 2);
 }
 
 

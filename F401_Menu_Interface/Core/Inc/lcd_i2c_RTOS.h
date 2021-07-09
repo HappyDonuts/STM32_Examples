@@ -56,21 +56,24 @@
 #define Rw B00000010  // Read/Write bit
 #define Rs B00000001  // Register select bit
 
-#define BUFFER_SIZE 40
+#define BUFFER_SIZE 	100
 
-#define MODE_DATA 0
-#define MODE_COMMAND 1
+#define MODE_DATA 		0
+#define MODE_COMMAND 	1
+
+#define CLEAR_OFF		0
+#define CLEAR_ON		1
 
 /**
  * @brief  lcd_message_t struct
  */
-typedef struct lcd_message_t{
+typedef struct lcd_message_t {
 	uint8_t message;
 	uint8_t exe_time;
 	uint8_t mode;
-	lcd_message_t* next_msg;
-}lcd_message_t;
-
+    struct lcd_message_t* next_msg;
+    struct lcd_message_t* prev_msg;
+} lcd_message_t;
 
 /**
  * @brief  lcd_i2c_RTOS_t struct
@@ -82,11 +85,19 @@ typedef struct lcd_i2c_RTOS_t{
 	uint8_t n_lines;
 	uint8_t display_control;
 	uint8_t display_mode;
-	lcd_message_t* buffer_messages;
-	uint8_t buffer_index;
-	uint8_t empty;
+	lcd_message_t* buffer_first_msg;
+	lcd_message_t* buffer_last_msg;
+	uint8_t n_messages;
 	osThreadId_t thread_id;
 } lcd_i2c_RTOS_t;
+
+typedef enum {
+	LCD_OK                 = 0x00, /*!< All fine. Proceed as usual. */
+	LCD_BUFFER_EMPTY       = 0x01, /*!< Error returned from KIM so check Error Structure */
+	LCD_BUFFER_FULL		   = 0x02, /*!< Error : Invalid Parameters */
+	LCD_INVALID_PARAM      = 0x03, /*!< Error : Invalid Parameters */
+	LCD_I2C_ERROR          = 0x04 , /*!< Error : Invalid Parameters */
+}LCD_StatusTypeDef;
 
 
 /**	--- Initialization functions --- **/
@@ -141,7 +152,7 @@ uint8_t lcd_i2c_RTOS_Init(lcd_i2c_RTOS_t* lcd_i2c_RTOS, I2C_HandleTypeDef *hi2c,
  * 				0: Buffer is empty or mode is not supported
  * 				1: Transmission was successful
  */
-uint8_t lcd_i2c_RTOS_Transmit(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
+LCD_StatusTypeDef lcd_i2c_RTOS_Transmit(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
 
 /**
  * @brief  Adds a command to the message buffer
@@ -152,7 +163,7 @@ uint8_t lcd_i2c_RTOS_Transmit(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
  * 				0: The buffer is full
  * 				1: The command was added succesfully
  */
-uint8_t lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS_t* lcd_i2c_RTOS, char cmd, uint8_t exe_time);
+LCD_StatusTypeDef lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS_t* lcd_i2c_RTOS, char cmd, uint8_t exe_time);
 
 /**
  * @brief  Adds a data byte to the message buffer
@@ -163,7 +174,7 @@ uint8_t lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS_t* lcd_i2c_RTOS, char cmd, uint8_t e
  * 				0: The buffer is full
  * 				1: The command was added succesfully
  */
-uint8_t lcd_i2c_RTOS_send_data (lcd_i2c_RTOS_t* lcd_i2c_RTOS, char data);  // send data to the lcd
+LCD_StatusTypeDef lcd_i2c_RTOS_send_data (lcd_i2c_RTOS_t* lcd_i2c_RTOS, char data);  // send data to the lcd
 
 
 /**	--- Interface functions --- **/
@@ -171,99 +182,103 @@ uint8_t lcd_i2c_RTOS_send_data (lcd_i2c_RTOS_t* lcd_i2c_RTOS, char data);  // se
 void lcd_i2c_RTOS_Handle_Messages(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
 
 /**
- * @brief  Send a string to the the buffer, so it can be displayed on a specific position of the display
- * @param  lcd_i2c_RTOS: variable targeting the desired display
- * @param  line: line at which the string will be displayed (1, 2, or 4)
- * @param  col: column at which the string will start to be displayed (under 16 or under 20)
- * @retval Write status:
- * 				0: line or column out of the display
- * 				1: string added correctly
+ * @brief  Send a string to the the buffer, so it can be displayed on a specific
+ * 		   position of the display.
+ * @param  lcd_i2c_RTOS: pointer to lcd_i2c_RTOS structure containing the info
+ * 		   for the specified display.
+ * @param  line: line at which the string will be displayed (1, 2, or 4).
+ * @param  col: column at which the string will start to be displayed
+ * 		   (under 16 or under 20).
+ * @param  clear: clears the selected line before displaying the string.
+ * 			 @arg CLEAR_ON: to clear the line
+ * 			 @arg CLEAR_OFF: to not clear the line
+ * @retval LCD Status
  */
-uint8_t lcd_i2c_RTOS_Write(lcd_i2c_RTOS_t* lcd_i2c_RTOS, uint8_t line, uint8_t col, char *str);
+LCD_StatusTypeDef lcd_i2c_RTOS_Write(lcd_i2c_RTOS_t* lcd_i2c_RTOS, uint8_t line, uint8_t col, char *str, uint8_t clear);
 
 /**
  * @brief  Turns on the display
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Display_On(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
+LCD_StatusTypeDef lcd_i2c_RTOS_Display_On(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
 
 /**
  * @brief  Turns off the display
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Display_Off(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
+LCD_StatusTypeDef lcd_i2c_RTOS_Display_Off(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
 
 /**
  * @brief  Turns on the underline cursor on the display
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Cursor_On(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
+LCD_StatusTypeDef lcd_i2c_RTOS_Cursor_On(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
 
 /**
  * @brief  Turns off the underline cursor on the display
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Cursor_Off(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
+LCD_StatusTypeDef lcd_i2c_RTOS_Cursor_Off(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
 
 /**
  * @brief  Turns on the blinking cursor
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Cursor_Blink_On(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
+LCD_StatusTypeDef lcd_i2c_RTOS_Cursor_Blink_On(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
 
 /**
  * @brief  Turns off the blinking cursor
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Cursor_Blink_Off(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
+LCD_StatusTypeDef lcd_i2c_RTOS_Cursor_Blink_Off(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
 
 /**
  * @brief  Scrolls the display left without changing the RAM
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Scroll_Left(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
+LCD_StatusTypeDef lcd_i2c_RTOS_Scroll_Left(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
 
 /**
  * @brief  Scrolls the display right without changing the RAM
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Scroll_Right(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
+LCD_StatusTypeDef lcd_i2c_RTOS_Scroll_Right(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
 
 /**
  * @brief  Sets the entry mode to the right
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Left_To_Right(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
+LCD_StatusTypeDef lcd_i2c_RTOS_Left_To_Right(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
 
 /**
  * @brief  Sets the entry mode to the left
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Right_To_Left(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
+LCD_StatusTypeDef lcd_i2c_RTOS_Right_To_Left(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
 
 /**
  * @brief  Justifies the text to the right
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Autoscroll_On(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
+LCD_StatusTypeDef lcd_i2c_RTOS_Autoscroll_On(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
 
 /**
  * @brief  Justifies the text to the left
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Autoscroll_Off(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
+LCD_StatusTypeDef lcd_i2c_RTOS_Autoscroll_Off(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
 
 /**
  * @brief  Clears the display removing all characters and resets position of the DDRAM
@@ -271,7 +286,7 @@ void lcd_i2c_RTOS_Autoscroll_Off(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Clear (lcd_i2c_RTOS_t* lcd_i2c_RTOS);
+LCD_StatusTypeDef lcd_i2c_RTOS_Clear (lcd_i2c_RTOS_t* lcd_i2c_RTOS);
 
 /**
  * @brief  Resets the position of the cursor to its initial state
@@ -279,7 +294,7 @@ void lcd_i2c_RTOS_Clear (lcd_i2c_RTOS_t* lcd_i2c_RTOS);
  * @param  lcd_i2c_RTOS: variable targeting the desired display
  * @retval None
  */
-void lcd_i2c_RTOS_Reset_Poistion(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
+LCD_StatusTypeDef lcd_i2c_RTOS_Reset_Poistion(lcd_i2c_RTOS_t* lcd_i2c_RTOS);
 
 
 #endif

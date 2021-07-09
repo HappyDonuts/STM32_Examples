@@ -54,10 +54,10 @@ const osThreadAttr_t encoderPolling_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
-/* Definitions for displayUpdate */
-osThreadId_t displayUpdateHandle;
-const osThreadAttr_t displayUpdate_attributes = {
-  .name = "displayUpdate",
+/* Definitions for oledDisplayUpda */
+osThreadId_t oledDisplayUpdaHandle;
+const osThreadAttr_t oledDisplayUpda_attributes = {
+  .name = "oledDisplayUpda",
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityBelowNormal,
 };
@@ -68,13 +68,26 @@ const osThreadAttr_t lcdSendMessages_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityBelowNormal1,
 };
+/* Definitions for lcdDisplayUpdat */
+osThreadId_t lcdDisplayUpdatHandle;
+const osThreadAttr_t lcdDisplayUpdat_attributes = {
+  .name = "lcdDisplayUpdat",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
 /* Definitions for mutex_position */
 osMutexId_t mutex_positionHandle;
 const osMutexAttr_t mutex_position_attributes = {
   .name = "mutex_position"
 };
+/* Definitions for mutex_cursor */
+osMutexId_t mutex_cursorHandle;
+const osMutexAttr_t mutex_cursor_attributes = {
+  .name = "mutex_cursor"
+};
 /* USER CODE BEGIN PV */
 	int16_t position = 0;
+	uint8_t cursor_enable = 0;
 	uint8_t button_flag = 0;
 	uint32_t lastTick = 0;
 	uint32_t now;
@@ -94,8 +107,9 @@ static void MX_GPIO_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_I2C1_Init(void);
 void StartEncoderPolling(void *argument);
-void StartDisplayUpdate(void *argument);
+void StartOledDisplayUpdate(void *argument);
 void StartlcdSendMessages(void *argument);
+void StartLcdDisplayUpdate(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -138,9 +152,8 @@ int main(void)
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
   ssd1306_1 = ssd1306_new(&hi2c1, 0x3C<<1); // 0x79
-  lcd_i2c_1 = lcd_i2c_new(&hi2c1, 0x27<<1, 16, 2);
+//  lcd_i2c_1 = lcd_i2c_new(&hi2c1, 0x27<<1, 16, 2);
   lcd_i2c_RTOS_1 = lcd_i2c_RTOS_new(&hi2c1, 0x27<<1, lcdSendMessagesHandle, 16, 2);
-
 
   SSD1306_GotoXY(ssd1306_1, 2, 0);
   SSD1306_Puts(ssd1306_1, "  Menu 1", &Font_11x18, 1);
@@ -160,9 +173,9 @@ int main(void)
 //  lcd_i2c_Write(lcd_i2c_1, 2, 0, "Blah");
 //  lcd_i2c_Write(lcd_i2c_1, 3, 0, "Blah again");
 
-
-//  lcd_i2c_RTOS_Write(lcd_i2c_RTOS_1, 0, 0, "Hello1 :)");
-//  lcd_i2c_RTOS_Write(lcd_i2c_RTOS_1, 1, 0, "Using FreeRTOS");
+//  char* text = "Hello!";
+//  lcd_i2c_RTOS_Write(lcd_i2c_RTOS_1, 0, 0, text, 1);
+//  lcd_i2c_RTOS_Write(lcd_i2c_RTOS_1, 1, 0, "Using FreeRTOS", 1);
 //  lcd_i2c_RTOS_Write(lcd_i2c_RTOS_1, 2, 0, "Blah");
 //  lcd_i2c_RTOS_Write(lcd_i2c_RTOS_1, 3, 0, "Blah again");
 
@@ -174,6 +187,9 @@ int main(void)
   /* Create the mutex(es) */
   /* creation of mutex_position */
   mutex_positionHandle = osMutexNew(&mutex_position_attributes);
+
+  /* creation of mutex_cursor */
+  mutex_cursorHandle = osMutexNew(&mutex_cursor_attributes);
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
@@ -195,11 +211,14 @@ int main(void)
   /* creation of encoderPolling */
   encoderPollingHandle = osThreadNew(StartEncoderPolling, NULL, &encoderPolling_attributes);
 
-  /* creation of displayUpdate */
-  displayUpdateHandle = osThreadNew(StartDisplayUpdate, NULL, &displayUpdate_attributes);
+  /* creation of oledDisplayUpda */
+  oledDisplayUpdaHandle = osThreadNew(StartOledDisplayUpdate, NULL, &oledDisplayUpda_attributes);
 
   /* creation of lcdSendMessages */
   lcdSendMessagesHandle = osThreadNew(StartlcdSendMessages, NULL, &lcdSendMessages_attributes);
+
+  /* creation of lcdDisplayUpdat */
+  lcdDisplayUpdatHandle = osThreadNew(StartLcdDisplayUpdate, NULL, &lcdDisplayUpdat_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -399,8 +418,6 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 		button_flag = 1;
 		lastTick = now + 200;
 	}
-
-
 }
 /* USER CODE END 4 */
 
@@ -429,6 +446,15 @@ void StartEncoderPolling(void *argument)
 		position = 4;
 	}
 	osMutexRelease(mutex_positionHandle);
+
+    if (button_flag){
+    	osMutexAcquire(mutex_cursorHandle, 0);
+        cursor_enable = !cursor_enable;
+        osMutexRelease(mutex_cursorHandle);
+        __HAL_TIM_SET_COUNTER(&htim2, 0);
+        button_flag = 0;
+    }
+
 	tick += 17;
 	osDelayUntil(tick);
   }
@@ -436,48 +462,44 @@ void StartEncoderPolling(void *argument)
   /* USER CODE END 5 */
 }
 
-/* USER CODE BEGIN Header_StartDisplayUpdate */
+/* USER CODE BEGIN Header_StartOledDisplayUpdate */
 /**
-* @brief Function implementing the displayUpdate thread.
+* @brief Function implementing the oledDisplayUpda thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_StartDisplayUpdate */
-void StartDisplayUpdate(void *argument)
+/* USER CODE END Header_StartOledDisplayUpdate */
+void StartOledDisplayUpdate(void *argument)
 {
-  /* USER CODE BEGIN StartDisplayUpdate */
+  /* USER CODE BEGIN StartOledDisplayUpdate */
   /* Infinite loop */
-	uint32_t tick = osKernelGetTickCount();
-	static uint8_t cursor_enable = 0;
+    uint32_t tick = osKernelGetTickCount();
   for(;;)
   {
-	  if (cursor_enable){
-		  osMutexAcquire(mutex_positionHandle, 0);
-		  int16_t position_l = position;
-		  osMutexRelease(mutex_positionHandle);
+	  osMutexAcquire(mutex_cursorHandle, 0);
+	  uint16_t cursor_l = cursor_enable;
+	  osMutexRelease(mutex_cursorHandle);
 
-		  tick_begin = osKernelGetTickCount();
-		  SSD1306_SetCursor(ssd1306_1, position_l);
-		  tick_end = osKernelGetTickCount();
-		  time_ms = tick_end - tick_begin;
-	  } else {
-		  SSD1306_ResetCursor(ssd1306_1);
-	  }
-	  SSD1306_UpdateScreen(ssd1306_1);
+      if (cursor_l){
+          osMutexAcquire(mutex_positionHandle, 0);
+          int16_t position_l = position;
+          osMutexRelease(mutex_positionHandle);
 
-	  if (button_flag){
-		  cursor_enable = !cursor_enable;
-		  __HAL_TIM_SET_COUNTER(&htim2, 0);
-		  button_flag = 0;
-	  }
-	  lcd_i2c_Cursor_Off(lcd_i2c_1);
-	  lcd_i2c_Write(lcd_i2c_1, 0, 0, "Hola");
+          tick_begin = osKernelGetTickCount();
+          SSD1306_SetCursor(ssd1306_1, position_l);
+          tick_end = osKernelGetTickCount();
+          time_ms = tick_end - tick_begin;
+      } else {
+          SSD1306_ResetCursor(ssd1306_1);
+      }
+      SSD1306_UpdateScreen(ssd1306_1);
 
-	  tick += 100;
-	  osDelayUntil(tick);
+      tick += 100;
+      osDelayUntil(tick);
   }
   osThreadTerminate(NULL);
-  /* USER CODE END StartDisplayUpdate */
+
+  /* USER CODE END StartOledDisplayUpdate */
 }
 
 /* USER CODE BEGIN Header_StartlcdSendMessages */
@@ -500,6 +522,34 @@ void StartlcdSendMessages(void *argument)
   }
   osThreadTerminate(NULL);
   /* USER CODE END StartlcdSendMessages */
+}
+
+/* USER CODE BEGIN Header_StartLcdDisplayUpdate */
+/**
+* @brief Function implementing the lcdDisplayUpdat thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartLcdDisplayUpdate */
+void StartLcdDisplayUpdate(void *argument)
+{
+  /* USER CODE BEGIN StartLcdDisplayUpdate */
+  /* Infinite loop */
+	uint32_t tick = osKernelGetTickCount();
+	lcd_i2c_RTOS_Write(lcd_i2c_RTOS_1, 0, 0, "Cursor position:", CLEAR_ON);
+  for(;;)
+  {
+	  osMutexAcquire(mutex_positionHandle, 0);
+	  uint16_t position_l = position;
+	  osMutexRelease(mutex_positionHandle);
+
+	  char position_str[5];
+	  sprintf(position_str, "%d", position_l);
+	  lcd_i2c_RTOS_Write(lcd_i2c_RTOS_1, 1, 0, position_str, CLEAR_OFF);
+	  tick += 200;
+	  osDelayUntil(tick);
+  }
+  /* USER CODE END StartLcdDisplayUpdate */
 }
 
  /**
