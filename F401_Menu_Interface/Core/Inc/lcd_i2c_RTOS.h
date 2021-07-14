@@ -122,7 +122,7 @@ lcd_message_t* lcd_i2c_RTOS_message_new(uint8_t message, uint8_t exe_time, uint8
  * @param  n_lines: number of the diaplay lines (usually 1, 2, or 4)
  * @retval lcd_i2c_RTOS_t variable targeting the desired display
  */
-lcd_i2c_RTOS_t* lcd_i2c_RTOS_new(I2C_HandleTypeDef *hi2c, uint8_t addr, osThreadId_t thread_id, uint8_t n_chars, uint8_t n_lines);
+lcd_i2c_RTOS_t* lcd_i2c_RTOS_new(I2C_HandleTypeDef *hi2c, uint8_t addr, uint8_t n_chars, uint8_t n_lines);
 
 
 
@@ -141,7 +141,7 @@ lcd_i2c_RTOS_t* lcd_i2c_RTOS_new(I2C_HandleTypeDef *hi2c, uint8_t addr, osThread
  *           - 0: LCD was not detected on I2C port
  *           - 1: LCD initialized OK and ready to use
  */
-uint8_t lcd_i2c_RTOS_Init(lcd_i2c_RTOS_t* lcd_i2c_RTOS, I2C_HandleTypeDef *hi2c, uint8_t addr, osThreadId_t thread_id, uint8_t n_chars, uint8_t n_lines);
+uint8_t lcd_i2c_RTOS_Init(lcd_i2c_RTOS_t* lcd_i2c_RTOS, I2C_HandleTypeDef *hi2c, uint8_t addr, uint8_t n_chars, uint8_t n_lines);
 
 /**
  * @brief  Reads the buffer, formats the message and transmits it through I2C protocol

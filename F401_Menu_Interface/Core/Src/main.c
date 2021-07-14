@@ -132,7 +132,6 @@ int main(void)
 
   /* MCU Configuration--------------------------------------------------------*/
 
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
 
   /* USER CODE BEGIN Init */
@@ -153,7 +152,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
   ssd1306_1 = ssd1306_new(&hi2c1, 0x3C<<1); // 0x79
 //  lcd_i2c_1 = lcd_i2c_new(&hi2c1, 0x27<<1, 16, 2);
-  lcd_i2c_RTOS_1 = lcd_i2c_RTOS_new(&hi2c1, 0x27<<1, lcdSendMessagesHandle, 16, 2);
+  lcd_i2c_RTOS_1 = lcd_i2c_RTOS_new(&hi2c1, 0x27<<1, 16, 2);
 
   SSD1306_GotoXY(ssd1306_1, 2, 0);
   SSD1306_Puts(ssd1306_1, "  Menu 1", &Font_11x18, 1);
@@ -536,16 +535,29 @@ void StartLcdDisplayUpdate(void *argument)
   /* USER CODE BEGIN StartLcdDisplayUpdate */
   /* Infinite loop */
 	uint32_t tick = osKernelGetTickCount();
+	static uint16_t position_last ;
 	lcd_i2c_RTOS_Write(lcd_i2c_RTOS_1, 0, 0, "Cursor position:", CLEAR_ON);
+	lcd_i2c_RTOS_Write(lcd_i2c_RTOS_1, 1, 0, "0", CLEAR_OFF);
+	osThreadResume(lcdSendMessagesHandle);
+
   for(;;)
   {
-	  osMutexAcquire(mutex_positionHandle, 0);
-	  uint16_t position_l = position;
-	  osMutexRelease(mutex_positionHandle);
+	  osMutexAcquire(mutex_cursorHandle, 0);
+	  uint16_t cursor_l = cursor_enable;
+	  osMutexRelease(mutex_cursorHandle);
 
-	  char position_str[5];
-	  sprintf(position_str, "%d", position_l);
-	  lcd_i2c_RTOS_Write(lcd_i2c_RTOS_1, 1, 0, position_str, CLEAR_OFF);
+	  if (cursor_l) {
+		  osMutexAcquire(mutex_positionHandle, 0);
+		  uint16_t position_l = position;
+		  osMutexRelease(mutex_positionHandle);
+		  if (position_last != position_l) {
+			  char position_str[5];
+			  sprintf(position_str, "%d", position_l);
+			  lcd_i2c_RTOS_Write(lcd_i2c_RTOS_1, 1, 0, position_str, CLEAR_OFF);
+			  osThreadResume(lcdSendMessagesHandle);
+			  position_last = position_l;
+		  }
+	  }
 	  tick += 200;
 	  osDelayUntil(tick);
   }

@@ -23,15 +23,14 @@ lcd_message_t* lcd_i2c_RTOS_message_new(uint8_t message, uint8_t exe_time, uint8
  * @brief  Creates lcd_i2c_RTOS_t variable corresponding to the display on a FreeRTOS environment
  * @param  *hi2c: I2C peripheral used by the mcu
  * @param  addr: I2C address corresponding to the targeted display
- * @param  thread_id: Thread ID of the associated FreeRTOS task
  * @param  n_chars: number of the diaplay columns, or chars (16 or 20)
  * @param  n_lines: number of the diaplay lines (usually 1, 2, or 4)
  * @retval lcd_i2c_RTOS_t variable targeting the desired display
  */
-lcd_i2c_RTOS_t* lcd_i2c_RTOS_new(I2C_HandleTypeDef *hi2c, uint8_t addr, osThreadId_t thread_id, uint8_t n_chars, uint8_t n_lines)
+lcd_i2c_RTOS_t* lcd_i2c_RTOS_new(I2C_HandleTypeDef *hi2c, uint8_t addr, uint8_t n_chars, uint8_t n_lines)
 {
 	lcd_i2c_RTOS_t* lcd_i2c_RTOS = malloc(sizeof(*lcd_i2c_RTOS));
-	lcd_i2c_RTOS_Init(lcd_i2c_RTOS, hi2c, addr, thread_id, n_chars, n_lines);
+	lcd_i2c_RTOS_Init(lcd_i2c_RTOS, hi2c, addr, n_chars, n_lines);
 	return lcd_i2c_RTOS;
 }
 
@@ -40,14 +39,13 @@ lcd_i2c_RTOS_t* lcd_i2c_RTOS_new(I2C_HandleTypeDef *hi2c, uint8_t addr, osThread
  * @param  lcd_i2c_RTOS_t variable targeting the desired display
  * @param  *hi2c: I2C peripheral used by the MCU
  * @param  addr: I2C address corresponding to the targeted display
- * @param  thread_id: Thread ID of the associated FreeRTOS task
  * @param  n_chars: number of the display columns, or chars (16 or 20)
  * @param  n_lines: number of the display lines (usually 1, 2, or 4)
  * @retval Initialization status:
  *           - 0: LCD was not detected on I2C port
  *           - 1: LCD initialized OK and ready to use
  */
-LCD_StatusTypeDef lcd_i2c_RTOS_Init(lcd_i2c_RTOS_t* lcd_i2c_RTOS, I2C_HandleTypeDef *hi2c, uint8_t addr, osThreadId_t thread_id, uint8_t n_chars, uint8_t n_lines)
+LCD_StatusTypeDef lcd_i2c_RTOS_Init(lcd_i2c_RTOS_t* lcd_i2c_RTOS, I2C_HandleTypeDef *hi2c, uint8_t addr, uint8_t n_chars, uint8_t n_lines)
 {
 	if ((n_chars != 16) && (n_chars != 20)) {
 		return LCD_INVALID_PARAM;
@@ -65,8 +63,6 @@ LCD_StatusTypeDef lcd_i2c_RTOS_Init(lcd_i2c_RTOS_t* lcd_i2c_RTOS, I2C_HandleType
 	lcd_i2c_RTOS->buffer_first_msg = NULL;
 	lcd_i2c_RTOS->buffer_last_msg = NULL;
 	lcd_i2c_RTOS->n_messages = 0;
-	lcd_i2c_RTOS->thread_id = thread_id;
-
 
 	if (HAL_I2C_IsDeviceReady(lcd_i2c_RTOS->hi2c, lcd_i2c_RTOS->addr, 1, 20000) != HAL_OK) {
 			/* Return false */
@@ -169,9 +165,6 @@ LCD_StatusTypeDef lcd_i2c_RTOS_send_cmd (lcd_i2c_RTOS_t* lcd_i2c_RTOS, char cmd,
 		}
 		lcd_i2c_RTOS->buffer_first_msg = msg;
 		lcd_i2c_RTOS->n_messages++;
-		if (osThreadGetState(lcd_i2c_RTOS->thread_id) == osThreadBlocked) {
-			osThreadResume(lcd_i2c_RTOS->thread_id);
-		}
 		return LCD_OK;
 	}
 }
@@ -200,12 +193,11 @@ LCD_StatusTypeDef lcd_i2c_RTOS_send_data (lcd_i2c_RTOS_t* lcd_i2c_RTOS, char dat
 		}
 		lcd_i2c_RTOS->buffer_first_msg = msg;
 		lcd_i2c_RTOS->n_messages++;
-		if (osThreadGetState(lcd_i2c_RTOS->thread_id) == osThreadBlocked) {
-			osThreadResume(lcd_i2c_RTOS->thread_id);
-		}
 		return LCD_OK;
 	}
 }
+
+extern osThreadId_t lcdSendMessagesHandle;
 
 void lcd_i2c_RTOS_Handle_Messages(lcd_i2c_RTOS_t* lcd_i2c_RTOS) {
 	uint32_t now;
@@ -213,7 +205,7 @@ void lcd_i2c_RTOS_Handle_Messages(lcd_i2c_RTOS_t* lcd_i2c_RTOS) {
 	static uint32_t tick_cooldown;
 
 	if (lcd_i2c_RTOS->n_messages == 0) {
-		osThreadSuspend(lcd_i2c_RTOS->thread_id);
+		osThreadSuspend(osThreadGetId());
 	} else {
 		now = osKernelGetTickCount();
 		if (now > tick_cooldown) {
