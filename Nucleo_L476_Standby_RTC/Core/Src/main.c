@@ -135,6 +135,7 @@ int main(void)
      HAL_RTCEx_DeactivateWakeUpTimer(&hrtc);
 
      /* Clear all related wakeup flags */
+     __HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);
 
      /* Re-enable all used wakeup sources*/
      /* ## Setting the Wake up time ############################################*/
