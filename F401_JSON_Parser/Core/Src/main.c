@@ -22,7 +22,10 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "jsmn.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -40,22 +43,34 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-RTC_HandleTypeDef hrtc;
 
 /* USER CODE BEGIN PV */
+char* json_weather = "{\"coord\":{\"lon\":1.4437,\"lat\":43.6043},\"weather\":[{\"id\":804,\"main\":\"Clouds\",\"description\":\"overcast clouds\",\"icon\":\"04d\"}],\"base\":\"stations\",\"main\":{\"temp\":20.69,\"feels_like\":20.72,\"temp_min\":18.78,\"temp_max\":22.65,\"pressure\":1015,\"humidity\":73},\"visibility\":10000,\"wind\":{\"speed\":6.69,\"deg\":320},\"clouds\":{\"all\":90},\"dt\":1627638326,\"sys\":{\"type\":1,\"id\":6467,\"country\":\"FR\",\"sunrise\":1627620077,\"sunset\":1627672790},\"timezone\":7200,\"id\":2972315,\"name\":\"Toulouse\",\"cod\":200}";
 
+//char* json = "a\"a";
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_RTC_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+static const char *JSON_STRING =
+    "{\"user\": \"johndoe\", \"admin\": false, \"uid\": 1000,\n  "
+    "\"groups\": [\"users\", \"wheel\", \"audio\", \"video\"]}";
+
+static int jsoneq(const char *json, jsmntok_t *tok, const char *s) {
+  if (tok->type == JSMN_STRING && (int)strlen(s) == tok->end - tok->start &&
+      strncmp(json + tok->start, s, tok->end - tok->start) == 0) {
+    return 0;
+  }
+  return -1;
+}
 
 /* USER CODE END 0 */
 
@@ -87,72 +102,63 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_RTC_Init();
   /* USER CODE BEGIN 2 */
 
-  /* Check and handle if the system was resumed from StandBy mode */
-   if(__HAL_PWR_GET_FLAG(PWR_FLAG_SB) != RESET)
-   {
-	 /* Clear Standby flag */
-	 __HAL_PWR_CLEAR_FLAG(PWR_FLAG_SB);
+	int i;
+	int r;
+	jsmn_parser p;
+	jsmntok_t t[128]; /* We expect no more than 128 tokens */
 
-   } else {
-//	 start_RTC_date(&hrtc, &sTime1, &sDate1);
-   }
-//   tx_RTC_date(&hrtc, &sTime1, &sDate1);
+	jsmn_init(&p);
+	r = jsmn_parse(&p, json_weather, strlen(json_weather), t,
+				   sizeof(t) / sizeof(t[0]));
+	if (r < 0) {
+	  printf("Failed to parse JSON: %d\n", r);
+	  return 1;
+	}
 
-   /* Reads data from backup register */
-//   ram_test = HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR10);
-//   if (ram_test == 15) {
-//	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
-//	HAL_Delay(1000);
-//	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
-//   }
+	/* Assume the top-level element is an object */
+	if (r < 1 || t[0].type != JSMN_OBJECT) {
+	  printf("Object expected\n");
+	  return 1;
+	}
 
-   /* Stores data into backup register */
-//   uint32_t data = 15;
-//   HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR10, data);
+	/* Loop over all keys of the root object */
+	char* name;
+	char* temp;
+	float temp_n;
+	char* temp_min;
+	char* temp_max;
+	char* humidity;
 
-   /* Insert 5 seconds delay */
-   HAL_Delay(5000);
+	for (i = 1; i < r; i++) {
+	if (jsoneq(json_weather, &t[i], "name") == 0) {
+		name = strndup(json_weather + t[i + 1].start, t[i + 1].end - t[i + 1].start);
+	} else if (jsoneq(json_weather, &t[i], "temp") == 0) {
+		temp = strndup(json_weather + t[i + 1].start, t[i + 1].end - t[i + 1].start);
+		temp_n = jsmn_get_floating_point(temp);
+	} else if (jsoneq(json_weather, &t[i], "temp_min") == 0) {
+		temp_min = strndup(json_weather + t[i + 1].start, t[i + 1].end - t[i + 1].start);
+	} else if (jsoneq(json_weather, &t[i], "temp_max") == 0) {
+		temp_max = strndup(json_weather + t[i + 1].start, t[i + 1].end - t[i + 1].start);
+	} else if (jsoneq(json_weather, &t[i], "humidity") == 0) {
+		humidity = strndup(json_weather + t[i + 1].start, t[i + 1].end - t[i + 1].start);
+	}
 
-   /* The Following Wakeup sequence is highly recommended prior to each Standby mode entry
-	 mainly  when using more than one wakeup source this is to not miss any wakeup event.
-	 - Disable all used wakeup sources,
-	 - Clear all related wakeup flags,
-	 - Re-enable all used wakeup sources,
-	 - Enter the Standby mode.
-   */
-   /* Disable all used wakeup sources*/
-   HAL_RTCEx_DeactivateWakeUpTimer(&hrtc);
+//	if (t[i + 1].type != JSMN_ARRAY) {
+//	  continue; /* We expect groups to be an array of strings */
+//	}
+//	for (j = 0; j < t[i + 1].size; j++) {
+//	  jsmntok_t *g = &t[i + j + 2];
+//	  printf("  * %.*s\n", g->end - g->start, JSON_STRING + g->start);
+//	}
+//	i += t[i + 1].size + 1;
+//	} else {
+//	printf("Unexpected key: %.*s\n", t[i].end - t[i].start,
+//		   JSON_STRING + t[i].start);
+//	}
+	}
 
-   /* Clear all related wakeup flags */
-   __HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);
-
-   /* Clear RTC Wake Up timer Flag */
-   __HAL_RTC_WAKEUPTIMER_CLEAR_FLAG(&hrtc, RTC_FLAG_WUTF);
-
-   /* Re-enable all used wakeup sources*/
-   /* ## Setting the Wake up time ############################################*/
-   /* RTC Wakeup Interrupt Generation:
-	 the wake-up counter is set to its maximum value to yield the longuest
-	 stand-by time to let the current reach its lowest operating point.
-	 The maximum value is 0xFFFF, corresponding to about 33 sec. when
-	 RTC_WAKEUPCLOCK_RTCCLK_DIV = RTCCLK_Div16 = 16
-	 Wakeup Time Base = (RTC_WAKEUPCLOCK_RTCCLK_DIV /(LSI))
-	 Wakeup Time = Wakeup Time Base * WakeUpCounter
-	   = (RTC_WAKEUPCLOCK_RTCCLK_DIV /(LSI)) * WakeUpCounter
-	   ==> WakeUpCounter = Wakeup Time / Wakeup Time Base
-
-	 To configure the wake up timer to 60s the WakeUpCounter is set to 0xFFFF:
-	 Wakeup Time Base = 16 /(~32.000KHz) = ~0.5 ms
-	 Wakeup Time = 0.5 ms  * WakeUpCounter
-	 Therefore, with wake-up counter =  0xFFFF  = 65,535
-		Wakeup Time =  0,5 ms *  65,535 = 32,7675 s ~ 33 sec. */
-   HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, 10, RTC_WAKEUPCLOCK_CK_SPRE_16BITS);
-
-   /* Enter the Standby mode */
-   HAL_PWR_EnterSTANDBYMode();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -174,7 +180,6 @@ void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
-  RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
 
   /** Configure the main internal regulator output voltage
   */
@@ -183,15 +188,14 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSI;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
-  RCC_OscInitStruct.PLL.PLLM = 16;
-  RCC_OscInitStruct.PLL.PLLN = 192;
-  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV4;
+  RCC_OscInitStruct.PLL.PLLM = 8;
+  RCC_OscInitStruct.PLL.PLLN = 84;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 4;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -202,54 +206,14 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV8;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
   {
     Error_Handler();
   }
-  PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_RTC;
-  PeriphClkInitStruct.RTCClockSelection = RCC_RTCCLKSOURCE_LSI;
-  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK)
-  {
-    Error_Handler();
-  }
-}
-
-/**
-  * @brief RTC Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_RTC_Init(void)
-{
-
-  /* USER CODE BEGIN RTC_Init 0 */
-
-  /* USER CODE END RTC_Init 0 */
-
-  /* USER CODE BEGIN RTC_Init 1 */
-
-  /* USER CODE END RTC_Init 1 */
-  /** Initialize RTC Only
-  */
-  hrtc.Instance = RTC;
-  hrtc.Init.HourFormat = RTC_HOURFORMAT_24;
-  hrtc.Init.AsynchPrediv = 127;
-  hrtc.Init.SynchPrediv = 255;
-  hrtc.Init.OutPut = RTC_OUTPUT_DISABLE;
-  hrtc.Init.OutPutPolarity = RTC_OUTPUT_POLARITY_HIGH;
-  hrtc.Init.OutPutType = RTC_OUTPUT_TYPE_OPENDRAIN;
-  if (HAL_RTC_Init(&hrtc) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN RTC_Init 2 */
-
-  /* USER CODE END RTC_Init 2 */
-
 }
 
 /**
@@ -259,21 +223,10 @@ static void MX_RTC_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
-  GPIO_InitTypeDef GPIO_InitStruct = {0};
 
   /* GPIO Ports Clock Enable */
-  __HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
-
-  /*Configure GPIO pin : PC13 */
-  GPIO_InitStruct.Pin = GPIO_PIN_13;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
 }
 
