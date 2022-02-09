@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "PWR/power_handler.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -39,6 +39,8 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+RTC_HandleTypeDef hrtc;
+
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim21;
 
@@ -54,6 +56,7 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_TIM21_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_RTC_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -94,7 +97,21 @@ int main(void)
   MX_USART2_UART_Init();
   MX_TIM21_Init();
   MX_TIM2_Init();
+  MX_RTC_Init();
   /* USER CODE BEGIN 2 */
+
+  /* Power handle struct */
+  power_handle_t* power_handle = power_handle_new(&hrtc, &huart2);
+
+  /* Check and handle if the system was resumed from StandBy mode */
+  	if(__HAL_PWR_GET_FLAG(PWR_FLAG_SB) != RESET)
+  	{
+  		/* Clear Standby flag */
+  		__HAL_PWR_CLEAR_FLAG(PWR_FLAG_SB);
+
+  	} else {
+  		ph_start_RTC_date(power_handle);
+  	}
 
   /* Both PWM at 51% (dead time included) */
   __HAL_TIM_SET_COMPARE(&htim21, TIM_CHANNEL_1, 509);
@@ -106,6 +123,64 @@ int main(void)
   /* Start both PWM */
   HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim21, TIM_CHANNEL_1);
+
+  HAL_Delay(6*3600*1000);
+
+  ph_set_wakeup_period(power_handle, 24*3600);
+
+  ph_enter_standby_mode(power_handle);
+
+//  /* Check and handle if the system was resumed from StandBy mode */
+//   if(__HAL_PWR_GET_FLAG(PWR_FLAG_SB) != RESET)
+//   {
+//     /* Clear Standby flag */
+//     __HAL_PWR_CLEAR_FLAG(PWR_FLAG_SB);
+//   }
+//
+//   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
+//
+//   /* Insert 5 seconds delay */
+//   HAL_Delay(5000);
+//
+//   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET);
+//
+//   /* The Following Wakeup sequence is highly recommended prior to each Standby mode entry
+//     mainly  when using more than one wakeup source this is to not miss any wakeup event.
+//     - Disable all used wakeup sources,
+//     - Clear all related wakeup flags,
+//     - Re-enable all used wakeup sources,
+//     - Enter the Standby mode.
+//   */
+//   /* Disable all used wakeup sources*/
+//   HAL_RTCEx_DeactivateWakeUpTimer(&hrtc);
+//
+//   /* Clear all related wakeup flags */
+//   __HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);
+//
+//   /* Re-enable all used wakeup sources*/
+//   /* ## Setting the Wake up time ############################################*/
+//   /* RTC Wakeup Interrupt Generation:
+//     the wake-up counter is set to its maximum value to yield the longuest
+//     stand-by time to let the current reach its lowest operating point.
+//     The maximum value is 0xFFFF, corresponding to about 33 sec. when
+//     RTC_WAKEUPCLOCK_RTCCLK_DIV = RTCCLK_Div16 = 16
+//     Wakeup Time Base = (RTC_WAKEUPCLOCK_RTCCLK_DIV /(LSI))
+//     Wakeup Time = Wakeup Time Base * WakeUpCounter
+//       = (RTC_WAKEUPCLOCK_RTCCLK_DIV /(LSI)) * WakeUpCounter
+//       ==> WakeUpCounter = Wakeup Time / Wakeup Time Base
+//
+//     To configure the wake up timer to 28s the WakeUpCounter is set to 0xFFFF:
+//     Wakeup Time Base = 16 /(~37.000KHz) = ~0.432 ms
+//     Wakeup Time = 0.432 ms  * WakeUpCounter
+//     Therefore, with wake-up counter =  0xFFFF  = 65,535
+//        Wakeup Time =  0,432 ms *  65,535 = 28,311 s ~ 28 sec. */
+//   HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, 10, RTC_WAKEUPCLOCK_CK_SPRE_16BITS);
+//
+//   /* Enter the Standby mode */
+//   HAL_PWR_EnterSTANDBYMode();
+
+//   /* Enter Stop Mode */
+//   HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON, PWR_STOPENTRY_WFI);
 
   /* USER CODE END 2 */
 
@@ -133,10 +208,15 @@ void SystemClock_Config(void)
   /** Configure the main internal regulator output voltage
   */
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
+  /** Configure LSE Drive Capability
+  */
+  HAL_PWR_EnableBkUpAccess();
+  __HAL_RCC_LSEDRIVE_CONFIG(RCC_LSEDRIVE_LOW);
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSE;
+  RCC_OscInitStruct.LSEState = RCC_LSE_ON;
   RCC_OscInitStruct.HSIState = RCC_HSI_DIV4;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
@@ -157,12 +237,48 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART2;
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART2|RCC_PERIPHCLK_RTC;
   PeriphClkInit.Usart2ClockSelection = RCC_USART2CLKSOURCE_PCLK1;
+  PeriphClkInit.RTCClockSelection = RCC_RTCCLKSOURCE_LSE;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief RTC Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_RTC_Init(void)
+{
+
+  /* USER CODE BEGIN RTC_Init 0 */
+
+  /* USER CODE END RTC_Init 0 */
+
+  /* USER CODE BEGIN RTC_Init 1 */
+
+  /* USER CODE END RTC_Init 1 */
+  /** Initialize RTC Only
+  */
+  hrtc.Instance = RTC;
+  hrtc.Init.HourFormat = RTC_HOURFORMAT_24;
+  hrtc.Init.AsynchPrediv = 127;
+  hrtc.Init.SynchPrediv = 255;
+  hrtc.Init.OutPut = RTC_OUTPUT_DISABLE;
+  hrtc.Init.OutPutRemap = RTC_OUTPUT_REMAP_NONE;
+  hrtc.Init.OutPutPolarity = RTC_OUTPUT_POLARITY_HIGH;
+  hrtc.Init.OutPutType = RTC_OUTPUT_TYPE_OPENDRAIN;
+  if (HAL_RTC_Init(&hrtc) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN RTC_Init 2 */
+
+  /* USER CODE END RTC_Init 2 */
+
 }
 
 /**
