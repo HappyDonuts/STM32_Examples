@@ -27,12 +27,10 @@
 #ifndef EPD2IN9B_H
 #define EPD2IN9B_H
 
-#include "Fonts/fonts.h"
 #include "BSP/epdif.h"
 #include <stdlib.h>
-// Display resolution
-#define EPD_WIDTH       128
-#define EPD_HEIGHT      296
+
+
 
 // EPD2IN9B commands
 #define PANEL_SETTING                               0x00
@@ -68,26 +66,18 @@
 #define READ_OTP_DATA                               0xA2
 #define POWER_SAVING                                0xE3
 
-typedef struct EPD_t {
-  int reset_pin;
-  int dc_pin;
-  int cs_pin;
-  int busy_pin;
-  int width;
-  int height;
-} EPD;
 
 /* Hardware operating functions */
-int  EPD_Init(EPD* epd);
-void EPD_WaitUntilIdle(EPD* epd);
-void EPD_DelayMs(EPD* epd, unsigned int delay_time);
-void EPD_Reset(EPD* epd);
-void EPD_DisplayFrame(EPD* epd, const unsigned char* frame_buffer_black, const unsigned char* frame_buffer_red);
-void EPD_Sleep(EPD* epd);
-void EPD_DigitalWrite(EPD* epd, int pin, int value);
-int  EPD_DigitalRead(EPD* epd, int pin);
-void EPD_SendCommand(EPD* epd, unsigned char command);
-void EPD_SendData(EPD* epd, unsigned char data);
+int  EPD_Init(epd_handle_t* epd_handle);
+void EPD_WaitUntilIdle(epd_handle_t* epd_handle);
+void EPD_DelayMs(uint16_t delaytime);
+void EPD_Reset(epd_handle_t* epd_handle);
+void EPD_DisplayFrame(epd_handle_t* epd_handle, const uint8_t* frame_buffer_black, const uint8_t* frame_buffer_red);
+void EPD_Sleep(epd_handle_t* epd_handle);
+void EPD_DigitalWrite(epd_pin_t* epd_pin, uint8_t value);
+int EPD_DigitalRead(epd_pin_t* epd_pin);
+void EPD_SendCommand(epd_handle_t* epd_handle, uint8_t command);
+void EPD_SendData(epd_handle_t* epd_handle, uint8_t data);
 
 #endif /* EPD2IN9B_H */
 

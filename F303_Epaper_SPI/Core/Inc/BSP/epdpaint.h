@@ -36,35 +36,37 @@
 // Color inverse. 1 or 0 = set or reset a bit if set a colored pixel
 #define IF_INVERT_COLOR     0
 
+#include <stdlib.h>
 #include "Fonts/fonts.h"
 
-typedef struct Paint_t {
-    unsigned char* image;
+typedef struct paint_t {
+    uint8_t* frame_buffer;
     int width;
     int height;
     int rotate;
-} Paint;
+} paint_t;
 
-void Paint_Init(Paint* paint, unsigned char* image, int width, int height);
-void Paint_Clear(Paint* paint, int colored);
-int  Paint_GetWidth(Paint* paint);
-void Paint_SetWidth(Paint* paint, int width);
-int  Paint_GetHeight(Paint* paint);
-void Paint_SetHeight(Paint* paint, int height);
-int  Paint_GetRotate(Paint* paint);
-void Paint_SetRotate(Paint* paint, int rotate);
-unsigned char* Paint_GetImage(Paint* paint);
-void Paint_DrawAbsolutePixel(Paint* paint, int x, int y, int colored);
-void Paint_DrawPixel(Paint* paint, int x, int y, int colored);
-void Paint_DrawCharAt(Paint* paint, int x, int y, char ascii_char, sFONT* font, int colored);
-void Paint_DrawStringAt(Paint* paint, int x, int y, const char* text, sFONT* font, int colored);
-void Paint_DrawLine(Paint* paint, int x0, int y0, int x1, int y1, int colored);
-void Paint_DrawHorizontalLine(Paint* paint, int x, int y, int width, int colored);
-void Paint_DrawVerticalLine(Paint* paint, int x, int y, int height, int colored);
-void Paint_DrawRectangle(Paint* paint, int x0, int y0, int x1, int y1, int colored);
-void Paint_DrawFilledRectangle(Paint* paint, int x0, int y0, int x1, int y1, int colored);
-void Paint_DrawCircle(Paint* paint, int x, int y, int radius, int colored);
-void Paint_DrawFilledCircle(Paint* paint, int x, int y, int radius, int colored);
+paint_t* paint_new(int width, int height);
+void paint_init(paint_t* paint, int width, int height);
+void Paint_Clear(paint_t* paint, int colored);
+int  Paint_GetWidth(paint_t* paint);
+void Paint_SetWidth(paint_t* paint, int width);
+int  Paint_GetHeight(paint_t* paint);
+void Paint_SetHeight(paint_t* paint, int height);
+int  Paint_GetRotate(paint_t* paint);
+void Paint_SetRotate(paint_t* paint, int rotate);
+unsigned char* Paint_GetImage(paint_t* paint);
+void Paint_DrawAbsolutePixel(paint_t* paint, int x, int y, int colored);
+void Paint_DrawPixel(paint_t* paint, int x, int y, int colored);
+void Paint_DrawCharAt(paint_t* paint, int x, int y, char ascii_char, sFONT* font, int colored);
+void Paint_DrawStringAt(paint_t* paint, int x, int y, const char* text, sFONT* font, int colored);
+void Paint_DrawLine(paint_t* paint, int x0, int y0, int x1, int y1, int colored);
+void Paint_DrawHorizontalLine(paint_t* paint, int x, int y, int width, int colored);
+void Paint_DrawVerticalLine(paint_t* paint, int x, int y, int height, int colored);
+void Paint_DrawRectangle(paint_t* paint, int x0, int y0, int x1, int y1, int colored);
+void Paint_DrawFilledRectangle(paint_t* paint, int x0, int y0, int x1, int y1, int colored);
+void Paint_DrawCircle(paint_t* paint, int x, int y, int radius, int colored);
+void Paint_DrawFilledCircle(paint_t* paint, int x, int y, int radius, int colored);
 
 #endif
 

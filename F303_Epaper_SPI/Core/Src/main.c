@@ -24,7 +24,7 @@
 #include "BSP/epd2in9b.h"
 #include "BSP/epdpaint.h"
 #include "BSP/imagedata.h"
-#include <stdlib.h>
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -36,6 +36,10 @@
 /* USER CODE BEGIN PD */
 #define COLORED      1
 #define UNCOLORED    0
+
+// Display resolution
+#define EPD_WIDTH       128
+#define EPD_HEIGHT      296
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -93,49 +97,57 @@ int main(void)
   MX_GPIO_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
-	unsigned char* frame_buffer_black = (unsigned char*)malloc(EPD_WIDTH * EPD_HEIGHT / 8);
-	unsigned char* frame_buffer_red = (unsigned char*)malloc(EPD_WIDTH * EPD_HEIGHT / 8);
 
-	EPD epd;
-	if (EPD_Init(&epd) != 0) {
-	    return -1;
-  }
+	/* Pins used by the Epaper display */
+	epd_pin_t* epd_pin_cs = epd_pin_new(GPIOA, GPIO_PIN_4);
+	epd_pin_t* epd_pin_rst = epd_pin_new(GPIOA, GPIO_PIN_1);
+	epd_pin_t* epd_pin_dc = epd_pin_new(GPIOA, GPIO_PIN_2);
+	epd_pin_t* epd_pin_busy = epd_pin_new(GPIOA, GPIO_PIN_3);
 
-	Paint paint_black;
-	Paint paint_red;
-	Paint_Init(&paint_black, frame_buffer_black, epd.width, epd.height);
-	Paint_Init(&paint_red, frame_buffer_red, epd.width, epd.height);
-	Paint_Clear(&paint_black, UNCOLORED);
-	Paint_Clear(&paint_red, UNCOLORED);
+	/* Epaper display handle struct*/
+	epd_handle_t* epd_handle_1 = epd_handle_new(&hspi1, epd_pin_cs, epd_pin_rst, epd_pin_dc, epd_pin_busy, EPD_WIDTH, EPD_HEIGHT);
+
+	if (EPD_Init(epd_handle_1) != 0) {
+		return -1;
+	}
+
+	/* Frame buffer paint struct */
+	paint_t* paint_black = paint_new(EPD_WIDTH, EPD_HEIGHT);
+	paint_t* paint_red = paint_new(EPD_WIDTH, EPD_HEIGHT);
+	Paint_Clear(paint_black, UNCOLORED);
+	Paint_Clear(paint_red, UNCOLORED);
 
 	/* Draw something to the frame buffer */
 	/* For simplicity, the arguments are explicit numerical coordinates */
-	Paint_SetRotate(&paint_black, ROTATE_0);
-	Paint_SetRotate(&paint_red, ROTATE_0);
-	Paint_DrawRectangle(&paint_black, 10, 80, 50, 140, COLORED);
-	Paint_DrawLine(&paint_black, 10, 80, 50, 140, COLORED);
-	Paint_DrawLine(&paint_black, 50, 80, 10, 140, COLORED);
-	Paint_DrawCircle(&paint_black, 90, 110, 30, COLORED);
-	Paint_DrawFilledRectangle(&paint_red, 10, 180, 50, 240, COLORED);
-	Paint_DrawFilledRectangle(&paint_red, 0, 6, 128, 26, COLORED);
-	Paint_DrawFilledCircle(&paint_red, 90, 210, 30, COLORED);
+	//      Paint_SetRotate(&paint_black, ROTATE_0);
+	//      Paint_SetRotate(&paint_red, ROTATE_0);
+	//      Paint_DrawRectangle(&paint_black, 10, 80, 50, 140, COLORED);
+	//      Paint_DrawLine(&paint_black, 10, 80, 50, 140, COLORED);
+	//      Paint_DrawLine(&paint_black, 50, 80, 10, 140, COLORED);
+	//      Paint_DrawCircle(&paint_black, 90, 110, 30, COLORED);
+	//      Paint_DrawFilledRectangle(&paint_red, 10, 180, 50, 240, COLORED);
+	//      Paint_DrawFilledRectangle(&paint_red, 0, 6, 128, 26, COLORED);
+	//      Paint_DrawFilledCircle(&paint_red, 90, 210, 30, COLORED);
 
 	/*Write strings to the buffer */
-	Paint_DrawStringAt(&paint_black, 4, 30, "e-Paper Demo", &Font12, COLORED);
-	Paint_DrawStringAt(&paint_red, 6, 10, "Hello world!", &Font12, UNCOLORED);
+	Paint_DrawStringAt(paint_black, 22, 30, "Hornet", &Font20, COLORED);;
+	Paint_DrawStringAt(paint_red, 6, 10, "Hello world!", &Font12, UNCOLORED);
 
-	/* Display the frame_buffer */
-	EPD_DisplayFrame(&epd, frame_buffer_black, frame_buffer_red);
+	/* Merge the frame buffer with the image */
+	for (int i = 0; i < epd_handle_1->width * epd_handle_1->height / 8; i++) {
+		uint8_t pixel_byte = paint_black->frame_buffer[i] & IMAGE_BLACK[i];
+		paint_black->frame_buffer[i] = pixel_byte;
+	}
 
 	/* Display the image buffer */
-	EPD_DisplayFrame(&epd, IMAGE_BLACK, IMAGE_RED);
+	EPD_DisplayFrame(epd_handle_1, paint_black->frame_buffer, IMAGE_RED);
 
-  /* USER CODE END 2 */
+/* USER CODE END 2 */
 
-  /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
-  while (1)
-  {
+/* Infinite loop */
+/* USER CODE BEGIN WHILE */
+while (1)
+{
 	  HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
 	  HAL_Delay(500);
     /* USER CODE END WHILE */

@@ -30,25 +30,38 @@
 
 #include "main.h"
 
-// Pin definition
-#define CS_PIN           0
-#define RST_PIN          1
-#define DC_PIN           2
-#define BUSY_PIN         3
 
 // Pin level definition
 #define LOW             0
 #define HIGH            1
 
+
+/* User: modify pin structure */
 typedef struct {
   GPIO_TypeDef* port;
   int pin;
-} EPD_Pin;
+} epd_pin_t;
 
-int  EpdInitCallback(void);
-void EpdDigitalWriteCallback(int pin, int value);
-int  EpdDigitalReadCallback(int pin);
-void EpdDelayMsCallback(unsigned int delaytime);
-void EpdSpiTransferCallback(unsigned char data);
+/* User: modify SPI parameter */
+typedef struct epd_handle_t {
+	SPI_HandleTypeDef* hspi;
+	epd_pin_t* epd_pin_cs;
+	epd_pin_t* epd_pin_rst;
+	epd_pin_t* epd_pin_dc;
+	epd_pin_t* epd_pin_busy;
+	int width;
+	int height;
+//	uint8_t* frame_buffer_black;
+//	uint8_t* frame_buffer_red;
+} epd_handle_t;
+
+epd_pin_t* epd_pin_new(GPIO_TypeDef* port, uint8_t pin);
+void epd_pin_init(epd_pin_t* epd_pin, GPIO_TypeDef* port, uint8_t pin);
+epd_handle_t* epd_handle_new(SPI_HandleTypeDef* hspi, epd_pin_t* epd_pin_cs, epd_pin_t* epd_pin_rst, epd_pin_t* epd_pin_dc, epd_pin_t* epd_pin_busy, uint16_t width, uint16_t height);
+int epd_handle_init(epd_handle_t* epd, SPI_HandleTypeDef* hspi, epd_pin_t* epd_pin_cs, epd_pin_t* epd_pin_rst, epd_pin_t* epd_pin_dc, epd_pin_t* epd_pin_busy, uint16_t width, uint16_t height);
+void EpdDigitalWriteCallback(epd_pin_t* epd_pin, uint8_t value);
+int EpdDigitalReadCallback(epd_pin_t* epd_pin);
+void EpdDelayMsCallback(uint16_t delaytime);
+void EpdSpiTransferCallback(epd_handle_t* epd_handle, uint8_t data);
 
 #endif /* EPDIF_H */

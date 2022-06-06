@@ -26,63 +26,79 @@
  */
 
 #include "epdif.h"
+#include <stdlib.h>
 
-extern SPI_HandleTypeDef hspi1;
+/* User: include hardware files */
+#include "main.h"
 
-EPD_Pin epd_cs_pin = {
-  SPI_CS_GPIO_Port,
-  SPI_CS_Pin,
-};
-
-EPD_Pin epd_rst_pin = {
-  RST_GPIO_Port,
-  RST_Pin,
-};
-
-EPD_Pin epd_dc_pin = {
-  DC_GPIO_Port,
-  DC_Pin,
-};
-
-EPD_Pin epd_busy_pin = {
-  BUSY_GPIO_Port,
-  BUSY_Pin,
-};
-
-EPD_Pin pins[4];
-
-void EpdDigitalWriteCallback(int pin_num, int value) {
-  if (value == HIGH) {
-    HAL_GPIO_WritePin((GPIO_TypeDef*)pins[pin_num].port, pins[pin_num].pin, GPIO_PIN_SET);
-  } else {
-    HAL_GPIO_WritePin((GPIO_TypeDef*)pins[pin_num].port, pins[pin_num].pin, GPIO_PIN_RESET);
-  }
+/* User: modify pin structure */
+epd_pin_t* epd_pin_new(GPIO_TypeDef* port, uint8_t pin)
+{
+	epd_pin_t* epd_pin = malloc(sizeof(*epd_pin));
+	epd_pin_init(epd_pin, port, pin);
+	return epd_pin;
 }
 
-int EpdDigitalReadCallback(int pin_num) {
-  if (HAL_GPIO_ReadPin(pins[pin_num].port, pins[pin_num].pin) == GPIO_PIN_SET) {
-    return HIGH;
-  } else {
-    return LOW;
-  }
+/* User: modify pin structure */
+void epd_pin_init(epd_pin_t* epd_pin, GPIO_TypeDef* port, uint8_t pin)
+{
+	epd_pin->port = port;
+	epd_pin->pin = pin;
 }
 
-void EpdDelayMsCallback(unsigned int delaytime) {
-  HAL_Delay(delaytime);
+/* User: modify SPI parameter */
+epd_handle_t* epd_handle_new(SPI_HandleTypeDef* hspi, epd_pin_t* epd_pin_cs, epd_pin_t* epd_pin_rst, epd_pin_t* epd_pin_dc, epd_pin_t* epd_pin_busy, uint16_t width, uint16_t height)
+{
+	epd_handle_t* epd_handle = malloc(sizeof(*epd_handle));
+	epd_handle_init(epd_handle, hspi, epd_pin_cs, epd_pin_rst, epd_pin_dc, epd_pin_busy, width, height);
+	return epd_handle;
 }
 
-void EpdSpiTransferCallback(unsigned char data) {
-  HAL_GPIO_WritePin((GPIO_TypeDef*)pins[CS_PIN].port, pins[CS_PIN].pin, GPIO_PIN_RESET);
-  HAL_SPI_Transmit(&hspi1, &data, 1, 1000);
-  HAL_GPIO_WritePin((GPIO_TypeDef*)pins[CS_PIN].port, pins[CS_PIN].pin, GPIO_PIN_SET);
+/* User: modify SPI parameter */
+int epd_handle_init(epd_handle_t* epd, SPI_HandleTypeDef* hspi, epd_pin_t* epd_pin_cs, epd_pin_t* epd_pin_rst, epd_pin_t* epd_pin_dc, epd_pin_t* epd_pin_busy, uint16_t width, uint16_t height)
+{
+	epd->hspi = hspi;
+	epd->epd_pin_cs = epd_pin_cs;
+	epd->epd_pin_rst = epd_pin_rst;
+	epd->epd_pin_dc = epd_pin_dc;
+	epd->epd_pin_busy = epd_pin_busy;
+	epd->width = width;
+	epd->height = height;
+	return 0;
 }
 
-int EpdInitCallback(void) {
-  pins[CS_PIN] = epd_cs_pin;
-  pins[RST_PIN] = epd_rst_pin;
-  pins[DC_PIN] = epd_dc_pin;
-  pins[BUSY_PIN] = epd_busy_pin;
-  
-  return 0;
+/* User: modify digital write function */
+void EpdDigitalWriteCallback(epd_pin_t* epd_pin, uint8_t value)
+{
+	if (value == HIGH) {
+		HAL_GPIO_WritePin(epd_pin->port, epd_pin->pin, GPIO_PIN_SET);
+	} else {
+		HAL_GPIO_WritePin(epd_pin->port, epd_pin->pin, GPIO_PIN_RESET);
+	}
 }
+
+/* User: modify digital read function */
+int EpdDigitalReadCallback(epd_pin_t* epd_pin)
+{
+	if (HAL_GPIO_ReadPin(epd_pin->port, epd_pin->pin) == GPIO_PIN_SET) {
+		return HIGH;
+	} else {
+		return LOW;
+	}
+}
+
+/* User: modify delay function */
+void EpdDelayMsCallback(uint16_t delaytime) {
+	HAL_Delay(delaytime);
+}
+
+/* User: modify SPI transfer and digital write functions */
+void EpdSpiTransferCallback(epd_handle_t* epd_handle, uint8_t data)
+{
+	HAL_GPIO_WritePin(epd_handle->epd_pin_cs->port, epd_handle->epd_pin_cs->pin, GPIO_PIN_RESET);
+	HAL_SPI_Transmit(epd_handle->hspi, &data, 1, 1000);
+	HAL_GPIO_WritePin(epd_handle->epd_pin_cs->port, epd_handle->epd_pin_cs->pin, GPIO_PIN_SET);
+}
+
+
 

@@ -26,10 +26,16 @@
 
 #include "epdpaint.h"
 
+paint_t* paint_new(int width, int height)
+{
+	paint_t* paint = malloc(sizeof(*paint));
+	paint_init(paint, width, height);
+	return paint;
+}
 
-void Paint_Init(Paint* paint, unsigned char* image, int width, int height) {
+void paint_init(paint_t* paint, int width, int height) {
+	paint->frame_buffer = malloc(sizeof(uint8_t) * width * height / 8);
     paint->rotate = ROTATE_0;
-    paint->image = image;
     /* 1 byte = 8 pixels, so the width should be the multiple of 8 */
     paint->width = width % 8 ? width + 8 - (width % 8) : width;
     paint->height = height;
@@ -38,7 +44,7 @@ void Paint_Init(Paint* paint, unsigned char* image, int width, int height) {
 /**
  *  @brief: clear the image
  */
-void Paint_Clear(Paint* paint, int colored) {
+void Paint_Clear(paint_t* paint, int colored) {
     for (int x = 0; x < paint->width; x++) {
         for (int y = 0; y < paint->height; y++) {
             Paint_DrawAbsolutePixel(paint, x, y, colored);
@@ -50,21 +56,21 @@ void Paint_Clear(Paint* paint, int colored) {
  *  @brief: this draws a pixel by absolute coordinates.
  *          this function won't be affected by the rotate parameter.
  */
-void Paint_DrawAbsolutePixel(Paint* paint, int x, int y, int colored) {
+void Paint_DrawAbsolutePixel(paint_t* paint, int x, int y, int colored) {
     if (x < 0 || x >= paint->width || y < 0 || y >= paint->height) {
         return;
     }
     if (IF_INVERT_COLOR) {
         if (colored) {
-            paint->image[(x + y * paint->width) / 8] |= 0x80 >> (x % 8);
+            paint->frame_buffer[(x + y * paint->width) / 8] |= 0x80 >> (x % 8);
         } else {
-            paint->image[(x + y * paint->width) / 8] &= ~(0x80 >> (x % 8));
+            paint->frame_buffer[(x + y * paint->width) / 8] &= ~(0x80 >> (x % 8));
         }
     } else {
         if (colored) {
-            paint->image[(x + y * paint->width) / 8] &= ~(0x80 >> (x % 8));
+            paint->frame_buffer[(x + y * paint->width) / 8] &= ~(0x80 >> (x % 8));
         } else {
-            paint->image[(x + y * paint->width) / 8] |= 0x80 >> (x % 8);
+            paint->frame_buffer[(x + y * paint->width) / 8] |= 0x80 >> (x % 8);
         }
     }
 }
@@ -72,38 +78,38 @@ void Paint_DrawAbsolutePixel(Paint* paint, int x, int y, int colored) {
 /**
  *  @brief: Getters and Setters
  */
-unsigned char* Paint_GetImage(Paint* paint) {
-    return paint->image;
+unsigned char* Paint_GetImage(paint_t* paint) {
+    return paint->frame_buffer;
 }
 
-int Paint_GetWidth(Paint* paint) {
+int Paint_GetWidth(paint_t* paint) {
     return paint->width;
 }
 
-void Paint_SetWidth(Paint* paint, int width) {
+void Paint_SetWidth(paint_t* paint, int width) {
     paint->width = width % 8 ? width + 8 - (width % 8) : width;
 }
 
-int Paint_GetHeight(Paint* paint) {
+int Paint_GetHeight(paint_t* paint) {
     return paint->height;
 }
 
-void Paint_SetHeight(Paint* paint, int height) {
+void Paint_SetHeight(paint_t* paint, int height) {
     paint->height = height;
 }
 
-int Paint_GetRotate(Paint* paint) {
+int Paint_GetRotate(paint_t* paint) {
     return paint->rotate;
 }
 
-void Paint_SetRotate(Paint* paint, int rotate){
+void Paint_SetRotate(paint_t* paint, int rotate){
     paint->rotate = rotate;
 }
 
 /**
  *  @brief: this draws a pixel by the coordinates
  */
-void Paint_DrawPixel(Paint* paint, int x, int y, int colored) {
+void Paint_DrawPixel(paint_t* paint, int x, int y, int colored) {
     int point_temp;
     if (paint->rotate == ROTATE_0) {
         if(x < 0 || x >= paint->width || y < 0 || y >= paint->height) {
@@ -139,7 +145,7 @@ void Paint_DrawPixel(Paint* paint, int x, int y, int colored) {
 /**
  *  @brief: this draws a charactor on the frame buffer but not refresh
  */
-void Paint_DrawCharAt(Paint* paint, int x, int y, char ascii_char, sFONT* font, int colored) {
+void Paint_DrawCharAt(paint_t* paint, int x, int y, char ascii_char, sFONT* font, int colored) {
     int i, j;
     unsigned int char_offset = (ascii_char - ' ') * font->Height * (font->Width / 8 + (font->Width % 8 ? 1 : 0));
     const unsigned char* ptr = &font->table[char_offset];
@@ -162,7 +168,7 @@ void Paint_DrawCharAt(Paint* paint, int x, int y, char ascii_char, sFONT* font, 
 /**
 *  @brief: this displays a string on the frame buffer but not refresh
 */
-void Paint_DrawStringAt(Paint* paint, int x, int y, const char* text, sFONT* font, int colored) {
+void Paint_DrawStringAt(paint_t* paint, int x, int y, const char* text, sFONT* font, int colored) {
     const char* p_text = text;
     unsigned int counter = 0;
     int refcolumn = x;
@@ -182,7 +188,7 @@ void Paint_DrawStringAt(Paint* paint, int x, int y, const char* text, sFONT* fon
 /**
 *  @brief: this draws a line on the frame buffer
 */
-void Paint_DrawLine(Paint* paint, int x0, int y0, int x1, int y1, int colored) {
+void Paint_DrawLine(paint_t* paint, int x0, int y0, int x1, int y1, int colored) {
     /* Bresenham algorithm */
     int dx = x1 - x0 >= 0 ? x1 - x0 : x0 - x1;
     int sx = x0 < x1 ? 1 : -1;
@@ -206,7 +212,7 @@ void Paint_DrawLine(Paint* paint, int x0, int y0, int x1, int y1, int colored) {
 /**
 *  @brief: this draws a horizontal line on the frame buffer
 */
-void Paint_DrawHorizontalLine(Paint* paint, int x, int y, int line_width, int colored) {
+void Paint_DrawHorizontalLine(paint_t* paint, int x, int y, int line_width, int colored) {
     int i;
     for (i = x; i < x + line_width; i++) {
         Paint_DrawPixel(paint, i, y, colored);
@@ -216,7 +222,7 @@ void Paint_DrawHorizontalLine(Paint* paint, int x, int y, int line_width, int co
 /**
 *  @brief: this draws a vertical line on the frame buffer
 */
-void Paint_DrawVerticalLine(Paint* paint, int x, int y, int line_height, int colored) {
+void Paint_DrawVerticalLine(paint_t* paint, int x, int y, int line_height, int colored) {
     int i;
     for (i = y; i < y + line_height; i++) {
         Paint_DrawPixel(paint, x, i, colored);
@@ -226,7 +232,7 @@ void Paint_DrawVerticalLine(Paint* paint, int x, int y, int line_height, int col
 /**
 *  @brief: this draws a rectangle
 */
-void Paint_DrawRectangle(Paint* paint, int x0, int y0, int x1, int y1, int colored) {
+void Paint_DrawRectangle(paint_t* paint, int x0, int y0, int x1, int y1, int colored) {
     int min_x, min_y, max_x, max_y;
     min_x = x1 > x0 ? x0 : x1;
     max_x = x1 > x0 ? x1 : x0;
@@ -242,7 +248,7 @@ void Paint_DrawRectangle(Paint* paint, int x0, int y0, int x1, int y1, int color
 /**
 *  @brief: this draws a filled rectangle
 */
-void Paint_DrawFilledRectangle(Paint* paint, int x0, int y0, int x1, int y1, int colored) {
+void Paint_DrawFilledRectangle(paint_t* paint, int x0, int y0, int x1, int y1, int colored) {
     int min_x, min_y, max_x, max_y;
     int i;
     min_x = x1 > x0 ? x0 : x1;
@@ -258,7 +264,7 @@ void Paint_DrawFilledRectangle(Paint* paint, int x0, int y0, int x1, int y1, int
 /**
 *  @brief: this draws a circle
 */
-void Paint_DrawCircle(Paint* paint, int x, int y, int radius, int colored) {
+void Paint_DrawCircle(paint_t* paint, int x, int y, int radius, int colored) {
     /* Bresenham algorithm */
     int x_pos = -radius;
     int y_pos = 0;
@@ -286,7 +292,7 @@ void Paint_DrawCircle(Paint* paint, int x, int y, int radius, int colored) {
 /**
 *  @brief: this draws a filled circle
 */
-void Paint_DrawFilledCircle(Paint* paint, int x, int y, int radius, int colored) {
+void Paint_DrawFilledCircle(paint_t* paint, int x, int y, int radius, int colored) {
     /* Bresenham algorithm */
     int x_pos = -radius;
     int y_pos = 0;
